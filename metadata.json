@@ -1,0 +1,6 @@
+{
+  "name": "Bexus AI",
+  "description": "Next-generation intelligent neural conversational AI assistant powered by Gemini with advanced deep reasoning, real-time code execution, document analysis, and natural multilingual dialogue.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

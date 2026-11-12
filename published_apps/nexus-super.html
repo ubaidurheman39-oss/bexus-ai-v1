@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ApexDrive — Luxury & Exotic Fleet — Luxury & Performance Fleet</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .font-display { font-family: 'Space Grotesk', sans-serif; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: rgba(59, 130, 246, 0.3); border-radius: 9999px; }
+  </style>
+</head>
+<body class="bg-[#07090e] text-zinc-100 h-full flex flex-col overflow-hidden selection:bg-blue-600 selection:text-white">
+  <!-- Header -->
+  <header class="border-b border-white/10 bg-[#0c0f17]/90 backdrop-blur-xl px-4 sm:px-6 py-3 flex items-center justify-between flex-shrink-0 z-30">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-cyan-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/25 text-lg font-black">
+        🏎️
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="font-extrabold text-sm sm:text-base text-white tracking-tight">ApexDrive — Luxury & Exotic Fleet</h1>
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">Verified Fleet</span>
+        </div>
+        <p class="text-[11px] text-zinc-400">Premium Exotic, SUV & Electric Vehicle Rentals</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <button onclick="openBookingsModal()" class="relative px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold flex items-center gap-2 border border-white/10 transition-all cursor-pointer">
+        <span>📋 My Bookings</span>
+        <span id="bookingCountBadge" class="w-4 h-4 rounded-full bg-blue-500 text-white font-bold text-[9px] flex items-center justify-center">0</span>
+      </button>
+      <button onclick="filterFleet('all')" class="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-lg shadow-blue-600/30 cursor-pointer">
+        Explore Fleet
+      </button>
+    </div>
+  </header>
+
+  <!-- Filter Bar -->
+  <nav class="border-b border-white/10 bg-[#090b12] px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4 overflow-x-auto flex-shrink-0">
+    <div class="flex items-center gap-2">
+      <button onclick="filterFleet('all')" class="fleet-pill active px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all bg-blue-600 text-white shadow-md shadow-blue-500/25 whitespace-nowrap cursor-pointer">All Vehicles (8)</button>
+      <button onclick="filterFleet('exotic')" class="fleet-pill px-3.5 py-1.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-white/5 transition-all whitespace-nowrap cursor-pointer">Supercars</button>
+      <button onclick="filterFleet('suv')" class="fleet-pill px-3.5 py-1.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-white/5 transition-all whitespace-nowrap cursor-pointer">Luxury SUVs</button>
+      <button onclick="filterFleet('electric')" class="fleet-pill px-3.5 py-1.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-white/5 transition-all whitespace-nowrap cursor-pointer">Electric EV</button>
+      <button onclick="filterFleet('sedan')" class="fleet-pill px-3.5 py-1.5 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-white/5 transition-all whitespace-nowrap cursor-pointer">Executive Sedans</button>
+    </div>
+    <div class="relative w-48 hidden md:block">
+      <input type="text" id="fleetSearch" oninput="searchFleet(this.value)" placeholder="Search Porsche, Urus, Tesla..." class="w-full px-3 py-1.5 pl-8 rounded-xl bg-zinc-900 border border-white/10 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500" />
+      <span class="absolute left-2.5 top-1.5 text-xs text-zinc-500">🔍</span>
+    </div>
+  </nav>
+
+  <!-- Main Grid -->
+  <main class="flex-1 overflow-y-auto p-4 sm:p-6">
+    <div id="fleetGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 max-w-7xl mx-auto">
+      <!-- Injected via JS -->
+    </div>
+  </main>
+
+  <!-- Rent / Booking Modal -->
+  <div id="rentalModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-[#10131e] border border-blue-500/30 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
+        <div>
+          <h3 id="modalCarTitle" class="text-base font-bold text-white">Reserve Vehicle</h3>
+          <p id="modalCarRate" class="text-xs text-blue-400 font-mono font-semibold">$350 / day</p>
+        </div>
+        <button onclick="closeRentalModal()" class="text-zinc-400 hover:text-white p-1 cursor-pointer">✕</button>
+      </div>
+
+      <form id="bookingForm" onsubmit="handleConfirmBooking(event)" class="space-y-3">
+        <div>
+          <label class="block text-[11px] font-semibold text-zinc-300 mb-1">Full Name</label>
+          <input type="text" id="custName" required placeholder="Alexander Vance" class="w-full px-3.5 py-2 rounded-xl bg-zinc-900 border border-white/10 text-xs text-white focus:outline-none focus:border-blue-500" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-semibold text-zinc-300 mb-1">Pickup Date</label>
+            <input type="date" id="custDate" required class="w-full px-3.5 py-2 rounded-xl bg-zinc-900 border border-white/10 text-xs text-white focus:outline-none focus:border-blue-500" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-zinc-300 mb-1">Rental Days</label>
+            <select id="custDays" onchange="calcTotal()" class="w-full px-3.5 py-2 rounded-xl bg-zinc-900 border border-white/10 text-xs text-white focus:outline-none focus:border-blue-500">
+              <option value="1">1 Day</option>
+              <option value="3" selected>3 Days</option>
+              <option value="7">7 Days (10% Off)</option>
+              <option value="14">14 Days (15% Off)</option>
+            </select>
+          </div>
+        </div>
+        <div class="p-3 rounded-2xl bg-blue-950/40 border border-blue-500/20 flex items-center justify-between">
+          <span class="text-xs text-zinc-300">Estimated Total:</span>
+          <span id="modalTotalPrice" class="text-base font-extrabold text-blue-400 font-mono">$1,050</span>
+        </div>
+        <button type="submit" class="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs transition-all shadow-lg shadow-blue-500/30 cursor-pointer">
+          Confirm Instant Reservation ⚡
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Bookings List Modal -->
+  <div id="bookingsListModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-[#10131e] border border-white/10 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-white/10 pb-3">
+        <h3 class="text-base font-bold text-white">Active Reservations</h3>
+        <button onclick="closeBookingsModal()" class="text-zinc-400 hover:text-white p-1 cursor-pointer">✕</button>
+      </div>
+      <div id="bookingsListContainer" class="max-h-72 overflow-y-auto space-y-2">
+        <!-- Rendered via JS -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const fleet = [
+      { id: 'c1', name: 'Porsche 911 GT3 RS', category: 'exotic', hp: '518 HP', speed: '3.0s 0-60', rate: 650, img: 'https://images.unsplash.com/photo-1614162692292-7ac56d7f7f1e?w=800&auto=format&fit=crop&q=80', badge: 'Popular' },
+      { id: 'c2', name: 'Lamborghini Urus Performante', category: 'suv', hp: '657 HP', speed: '3.1s 0-60', rate: 750, img: 'https://images.unsplash.com/photo-1544829099-b9a0c07fad1a?w=800&auto=format&fit=crop&q=80', badge: 'Top Rated' },
+      { id: 'c3', name: 'Ferrari F8 Tributo Spider', category: 'exotic', hp: '710 HP', speed: '2.9s 0-60', rate: 950, img: 'https://images.unsplash.com/photo-1592198084033-aade902d1aae?w=800&auto=format&fit=crop&q=80', badge: 'Exotic' },
+      { id: 'c4', name: 'Mercedes-AMG G63 Mansory', category: 'suv', hp: '577 HP', speed: '4.5s 0-60', rate: 580, img: 'https://images.unsplash.com/photo-1520031441872-265e4ff70366?w=800&auto=format&fit=crop&q=80', badge: 'VIP Choice' },
+      { id: 'c5', name: 'Tesla Model S Plaid', category: 'electric', hp: '1,020 HP', speed: '1.99s 0-60', rate: 420, img: 'https://images.unsplash.com/photo-1536700503339-1e4b06520771?w=800&auto=format&fit=crop&q=80', badge: 'Zero Emission' },
+      { id: 'c6', name: 'Porsche Taycan Turbo S', category: 'electric', hp: '750 HP', speed: '2.6s 0-60', rate: 490, img: 'https://images.unsplash.com/photo-1617788138017-80ad40651399?w=800&auto=format&fit=crop&q=80', badge: 'Electric' },
+      { id: 'c7', name: 'Rolls-Royce Ghost Series II', category: 'sedan', hp: '563 HP', speed: '4.6s 0-60', rate: 1200, img: 'https://images.unsplash.com/photo-1631295868223-63265b40d9e4?w=800&auto=format&fit=crop&q=80', badge: 'Chauffeur' },
+      { id: 'c8', name: 'BMW M8 Competition Gran Coupe', category: 'sedan', hp: '617 HP', speed: '3.0s 0-60', rate: 390, img: 'https://images.unsplash.com/photo-1555215695-3004980ad54e?w=800&auto=format&fit=crop&q=80', badge: 'Sport' }
+    ];
+
+    let currentCategory = 'all';
+    let searchQuery = '';
+    let selectedCar = null;
+    let reservations = JSON.parse(localStorage.getItem('bexus_car_reservations') || '[]');
+
+    function renderFleet() {
+      const grid = document.getElementById('fleetGrid');
+      const filtered = fleet.filter(c => {
+        const matchCat = currentCategory === 'all' || c.category === currentCategory;
+        const matchSearch = !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchCat && matchSearch;
+      });
+
+      grid.innerHTML = filtered.map(c => `
+        <div class="rounded-3xl bg-[#0f121d] border border-white/10 overflow-hidden hover:border-blue-500/50 transition-all group flex flex-col justify-between shadow-xl">
+          <div class="relative h-48 overflow-hidden bg-black/40">
+            <img src="${c.img}" alt="${c.name}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+            <div class="absolute inset-0 bg-gradient-to-t from-[#0f121d] via-transparent to-transparent"></div>
+            <span class="absolute top-3 right-3 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-blue-600/90 text-white backdrop-blur-md shadow-md">${c.badge}</span>
+          </div>
+          <div class="p-5 flex-1 flex flex-col justify-between space-y-4">
+            <div>
+              <h3 class="text-sm sm:text-base font-extrabold text-white tracking-tight">${c.name}</h3>
+              <div class="flex items-center gap-3 mt-2 text-xs text-zinc-400">
+                <span class="flex items-center gap-1 font-mono">⚡ ${c.hp}</span>
+                <span>•</span>
+                <span class="flex items-center gap-1 font-mono">⏱️ ${c.speed}</span>
+              </div>
+            </div>
+            <div class="pt-3 border-t border-white/5 flex items-center justify-between">
+              <div>
+                <span class="text-xs text-zinc-400">Daily rate</span>
+                <p class="text-base font-black text-blue-400 font-mono">$${c.rate} <span class="text-[10px] text-zinc-400 font-normal">/ day</span></p>
+              </div>
+              <button onclick="openRentalModal('${c.id}')" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/30 cursor-pointer">
+                Reserve ➔
+              </button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+
+      document.getElementById('bookingCountBadge').innerText = reservations.length;
+    }
+
+    function filterFleet(cat) {
+      currentCategory = cat;
+      document.querySelectorAll('.fleet-pill').forEach(btn => {
+        btn.classList.toggle('active', btn.innerText.toLowerCase().includes(cat) || (cat === 'all' && btn.innerText.includes('All')));
+        btn.classList.toggle('bg-blue-600', btn.classList.contains('active'));
+        btn.classList.toggle('text-white', btn.classList.contains('active'));
+      });
+      renderFleet();
+    }
+
+    function searchFleet(q) {
+      searchQuery = q;
+      renderFleet();
+    }
+
+    function openRentalModal(carId) {
+      selectedCar = fleet.find(c => c.id === carId);
+      if (!selectedCar) return;
+      document.getElementById('modalCarTitle').innerText = selectedCar.name;
+      document.getElementById('modalCarRate').innerText = '$' + selectedCar.rate + ' / day';
+      calcTotal();
+      document.getElementById('rentalModal').classList.remove('hidden');
+    }
+
+    function closeRentalModal() {
+      document.getElementById('rentalModal').classList.add('hidden');
+    }
+
+    function calcTotal() {
+      if (!selectedCar) return;
+      const days = parseInt(document.getElementById('custDays').value || '1', 10);
+      let disc = 1;
+      if (days >= 14) disc = 0.85;
+      else if (days >= 7) disc = 0.9;
+      const total = Math.round(selectedCar.rate * days * disc);
+      document.getElementById('modalTotalPrice').innerText = '$' + total.toLocaleString();
+    }
+
+    function handleConfirmBooking(e) {
+      e.preventDefault();
+      if (!selectedCar) return;
+      const name = document.getElementById('custName').value;
+      const date = document.getElementById('custDate').value;
+      const days = parseInt(document.getElementById('custDays').value, 10);
+      const total = document.getElementById('modalTotalPrice').innerText;
+
+      const newBooking = {
+        id: 'bk_' + Date.now(),
+        carName: selectedCar.name,
+        name,
+        date,
+        days,
+        total,
+        createdAt: new Date().toLocaleDateString()
+      };
+
+      reservations.unshift(newBooking);
+      localStorage.setItem('bexus_car_reservations', JSON.stringify(reservations));
+      closeRentalModal();
+      renderFleet();
+      showToast('🎉 Reservation Confirmed for ' + selectedCar.name + '! Pick up on ' + date + '.');
+    }
+
+    function showToast(msg) {
+      const container = document.getElementById('toastBox');
+      if (!container) return;
+      const t = document.createElement('div');
+      t.className = 'px-4 py-3 rounded-2xl bg-zinc-900/95 border border-blue-500/40 shadow-2xl backdrop-blur-xl text-xs font-semibold text-white flex items-center gap-2 transform translate-y-3 opacity-0 transition-all duration-300 pointer-events-auto';
+      t.innerHTML = '<span>⚡</span><span>' + msg + '</span>';
+      container.appendChild(t);
+      setTimeout(() => t.classList.remove('translate-y-3', 'opacity-0'), 10);
+      setTimeout(() => {
+        t.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => t.remove(), 300);
+      }, 3500);
+    }
+
+    function openBookingsModal() {
+      const container = document.getElementById('bookingsListContainer');
+      if (reservations.length === 0) {
+        container.innerHTML = '<p class="text-xs text-zinc-400 py-6 text-center">No active vehicle reservations yet. Choose any car to reserve!</p>';
+      } else {
+        container.innerHTML = reservations.map((b, idx) => `
+          <div class="p-3.5 rounded-2xl bg-zinc-900 border border-white/5 flex items-center justify-between">
+            <div>
+              <h4 class="text-xs font-bold text-white">${b.carName}</h4>
+              <p class="text-[11px] text-zinc-400">Driver: ${b.name} • Date: ${b.date} (${b.days} days)</p>
+            </div>
+            <div class="text-right">
+              <span class="text-xs font-mono font-bold text-blue-400">${b.total}</span>
+              <button onclick="cancelBooking(${idx})" class="block text-[10px] text-rose-400 hover:underline mt-0.5">Cancel</button>
+            </div>
+          </div>
+        `).join('');
+      }
+      document.getElementById('bookingsListModal').classList.remove('hidden');
+    }
+
+    function cancelBooking(idx) {
+      reservations.splice(idx, 1);
+      localStorage.setItem('bexus_car_reservations', JSON.stringify(reservations));
+      openBookingsModal();
+      renderFleet();
+    }
+
+    function closeBookingsModal() {
+      document.getElementById('bookingsListModal').classList.add('hidden');
+    }
+
+    // Set today as min date
+    const todayStr = new Date().toISOString().split('T')[0];
+    document.getElementById('custDate').min = todayStr;
+    document.getElementById('custDate').value = todayStr;
+
+    renderFleet();
+  </script>
+  <div id="toastBox" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none"></div>
+</body>
+</html>

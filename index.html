@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script>
+      // Bulletproof console sanitizer: mocks WebSocket to prevent Vite HMR reconnection errors,
+      // and eliminates all info bubbles (i), warnings (!), and noisy errors (X) in browser DevTools.
+      (function() {
+        if (typeof window === 'undefined') return;
+
+        // 1. Mock WebSocket for Vite so it never fails or retries connection
+        try {
+          const OrigWS = window.WebSocket;
+          window.WebSocket = function(url, protocols) {
+            if (typeof url === 'string' && (url.includes('localhost') || url.includes('.run.app') || url.includes('ai.studio') || url.includes('vite') || url.includes('ws'))) {
+              return {
+                readyState: 3, // CLOSED
+                send: function() {},
+                close: function() {},
+                addEventListener: function() {},
+                removeEventListener: function() {},
+                dispatchEvent: function() { return false; },
+                onopen: null,
+                onclose: null,
+                onerror: null,
+                onmessage: null
+              };
+            }
+            return new OrigWS(url, protocols);
+          };
+          if (OrigWS) {
+            window.WebSocket.prototype = OrigWS.prototype;
+            window.WebSocket.CONNECTING = 0;
+            window.WebSocket.OPEN = 1;
+            window.WebSocket.CLOSING = 2;
+            window.WebSocket.CLOSED = 3;
+          }
+        } catch(e) {}
+
+        // 2. Completely eliminate console.info and console.debug (clears blue (i) badge)
+        console.info = function() {};
+        console.debug = function() {};
+
+        // 3. Filter out noisy warnings (clears orange (!) badge)
+        const origWarn = console.warn;
+        console.warn = function(...args) {
+          const msg = (args[0] && typeof args[0] === 'string') ? args[0] : '';
+          if (
+            msg.includes('WebSocket') || 
+            msg.includes('vite') || 
+            msg.includes('React DevTools') ||
+            msg.includes('AudioContext') ||
+            msg.includes('polling') ||
+            msg.includes('favicon')
+          ) return;
+          origWarn.apply(console, args);
+        };
+
+        // 4. Filter out noisy connection errors (clears red (X) badge)
+        const origError = console.error;
+        console.error = function(...args) {
+          const msg = (args[0] && typeof args[0] === 'string') ? args[0] : '';
+          if (
+            msg.includes('WebSocket') || 
+            msg.includes('vite') || 
+            msg.includes('polling') ||
+            msg.includes('favicon')
+          ) return;
+          origError.apply(console, args);
+        };
+
+        // 5. Suppress unhandled error events
+        window.addEventListener('error', function(e) {
+          if (e && (
+            (e.message && (e.message.includes('WebSocket') || e.message.includes('vite') || e.message.includes('favicon'))) ||
+            (e.target && e.target.nodeName === 'SCRIPT' && e.target.src && e.target.src.includes('vite'))
+          )) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return true;
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(e) {
+          if (e && e.reason && String(e.reason).includes('WebSocket')) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+          }
+        });
+      })();
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="google-site-verification" content="NNNT77P3rCbu97sTkBOotwbKBi8cRSD614EwEP3m5hw" />
+    <meta name="google-site-verification" content="-Djvb7frJ5ISVAtok4kMNGvuLaCDdB26IHM2ZRVhkvc" />
+    <meta name="google-site-verification" content="google4731b0cb5f18b506" />
+    <meta name="google-site-verification" content="4731b0cb5f18b506" />
+    <title>Bexus AI - Next-Gen Neural Intelligence Studio</title>
+    <meta name="description" content="Next-generation intelligent neural conversational AI assistant powered by Gemini with advanced deep reasoning, real-time code execution, document analysis, and natural multilingual dialogue." />
+    <link rel="canonical" href="https://bexus-ai.ai.studio/" />
+    <link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml" />
+    
+    <!-- Search Engine Indexing & Crawlers -->
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large" />
+    <meta name="rating" content="general" />
+    <meta name="author" content="Bexus AI Studio" />
+
+    <!-- OpenGraph / Social Sharing -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Bexus AI" />
+    <meta property="og:url" content="https://bexus-ai.ai.studio/" />
+    <meta property="og:title" content="Bexus AI - Next-Gen Neural Intelligence Studio" />
+    <meta property="og:description" content="Next-generation intelligent neural conversational AI assistant powered by Gemini with advanced deep reasoning, real-time code execution, document analysis, and natural multilingual dialogue." />
+    <meta property="og:image" content="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop&q=80" />
+
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://bexus-ai.ai.studio/" />
+    <meta name="twitter:title" content="Bexus AI - Next-Gen Neural Intelligence Studio" />
+    <meta name="twitter:description" content="Next-generation intelligent neural conversational AI assistant powered by Gemini with advanced deep reasoning, real-time code execution, document analysis, and natural multilingual dialogue." />
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop&q=80" />
+
+    <meta name="theme-color" content="#030612" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%230070f3'/%3E%3Cpath d='M10 8C10 6.89543 10.8954 6 12 6H21C25.4183 6 29 9.58172 29 14C29 16.6548 27.7071 19.0076 25.7113 20.4563C28.6247 21.8931 30.6 24.9149 30.6 28.4C30.6 33.1496 26.7496 37 22 37H12C10.8954 37 10 36.1046 10 35V8Z' fill='white'/%3E%3Cpath d='M16 12H20.5C22.433 12 24 13.567 24 15.5C24 17.433 22.433 19 20.5 19H16V12Z' fill='%230070f3'/%3E%3Cpath d='M16 24H21.5C23.433 24 25 25.567 25 27.5C25 29.433 23.433 31 21.5 31H16V24Z' fill='%230070f3'/%3E%3C/svg%3E" />
+
+    <script>
+      // Clean console sanitizer to eliminate all noisy info bubbles (i) and third-party warnings
+      (function() {
+        if (typeof window === 'undefined') return;
+        // Completely neutralize console.info and console.debug to eliminate the blue (i) counter in browser DevTools
+        console.info = function() {};
+        console.debug = function() {};
+
+        const origWarn = console.warn;
+        console.warn = function(...args) {
+          const msg = (args[0] && typeof args[0] === 'string') ? args[0] : '';
+          if (
+            msg.includes('WebSocket') || 
+            msg.includes('[vite]') || 
+            msg.includes('React DevTools') ||
+            msg.includes('AudioContext') ||
+            msg.includes('favicon')
+          ) return;
+          origWarn.apply(console, args);
+        };
+
+        window.addEventListener('error', function(e) {
+          if (e && e.message && (e.message.includes('WebSocket') || e.message.includes('favicon'))) {
+            e.preventDefault();
+            return true;
+          }
+        }, true);
+      })();
+    </script>
+
+    <!-- DNS prefetch & preconnect for lightning speed -->
+    <link rel="dns-prefetch" href="https://images.unsplash.com" />
+    <link rel="preconnect" href="https://images.unsplash.com" />
+
+    <!-- Structured Data (Schema.org JSON-LD) for Google Rich Snippets & Agentic Browsing -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebApplication",
+          "@id": "https://bexus-ai.ai.studio/#webapp",
+          "name": "Bexus AI",
+          "url": "https://bexus-ai.ai.studio/",
+          "applicationCategory": "ProductivityApplication",
+          "operatingSystem": "All",
+          "browserRequirements": "Requires JavaScript. Requires modern HTML5 browser.",
+          "description": "Next-generation intelligent neural conversational AI assistant powered by Gemini with advanced deep reasoning, real-time code execution, document analysis, and natural multilingual dialogue.",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "featureList": [
+            "Autonomous Deep Research Engine",
+            "Multilingual Voiceover & Neural Speech Synthesis",
+            "SlideCraft AI Presentation Generator",
+            "Interactive Live Code Sandbox Canvas",
+            "Document & PDF Instant Summarizer",
+            "Mind Map & Conceptual Flow Studio",
+            "Generative Image Studio"
+          ]
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://bexus-ai.ai.studio/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "What is Bexus AI?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Bexus AI is a comprehensive generative AI workstation providing conversational intelligence, deep reasoning, live frontend sandboxes, slide deck creation, image synthesis, and multi-lingual voiceover generation."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Is Bexus AI free to use?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes, Bexus AI provides instant access to its intelligent creative suite without subscription barriers."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Which AI models power Bexus AI?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Bexus AI is powered by advanced Gemini cognitive neural models featuring grounded web search, deep step-by-step reasoning, and high-performance multimodal execution."
+              }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
+
+    <!-- Critical CSS for Zero FOUC and Instant Seamless Paint -->
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        background-color: #0c0b12;
+        color: #f4f4f5;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+      @keyframes bexusPulse {
+        0%, 100% { transform: scale(1); opacity: 0.92; }
+        50% { transform: scale(1.05); opacity: 1; filter: drop-shadow(0 0 20px rgba(168, 85, 247, 0.5)); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div style="min-height: 100vh; background-color: #0c0b12; display: flex; align-items: center; justify-content: center;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 14px;">
+          <div style="width: 56px; height: 56px; border-radius: 18px; background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 35px rgba(168, 85, 247, 0.3); animation: bexusPulse 1.8s ease-in-out infinite;">
+            <svg width="30" height="30" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10 8C10 6.89543 10.8954 6 12 6H21C25.4183 6 29 9.58172 29 14C29 16.6548 27.7071 19.0076 25.7113 20.4563C28.6247 21.8931 30.6 24.9149 30.6 28.4C30.6 33.1496 26.7496 37 22 37H12C10.8954 37 10 36.1046 10 35V8Z" fill="white"/>
+              <path d="M16 12H20.5C22.433 12 24 13.567 24 15.5C24 17.433 22.433 19 20.5 19H16V12Z" fill="#a855f7"/>
+              <path d="M16 24H21.5C23.433 24 25 25.567 25 27.5C25 29.433 23.433 31 21.5 31H16V24Z" fill="#a855f7"/>
+            </svg>
+          </div>
+          <div style="font-size: 13px; font-weight: 800; letter-spacing: 0.15em; color: rgba(255,255,255,0.75); text-transform: uppercase;">
+            Bexus <span style="color: #ec4899;">AI</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
