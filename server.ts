@@ -854,9 +854,10 @@ async function startServer() {
   const isDev = process.env.npm_lifecycle_event === 'dev' || process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
   const isProduction = !isDev && (process.env.NODE_ENV === 'production' || process.env.npm_lifecycle_event === 'start');
 
-  if (!isProduction) {
+  if (!isProduction && !process.env.VERCEL) {
     try {
-      const { createServer: createViteServer } = await import('vite');
+      const vitePkg = 'vite';
+      const { createServer: createViteServer } = await import(vitePkg);
       const vite = await createViteServer({
         server: { 
           middlewareMode: true,

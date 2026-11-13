@@ -1,6 +1,15 @@
 import 'dotenv/config';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
-import sharp from 'sharp';
+
+async function getSharp(): Promise<any> {
+  try {
+    const modName = 'sharp';
+    const mod = await import(modName);
+    return mod.default || mod;
+  } catch {
+    return null;
+  }
+}
 import { generateWorldClassApp } from '../utils/worldClassAppTemplates.ts';
 import { synthesizeIntelligentSlideDeck } from '../utils/slideDeckSynthesizer.ts';
 import type { SlideDeck, SlideItem } from '../types/index.ts';
@@ -599,12 +608,16 @@ export async function renderCleanImageBuffer(
       const buf = Buffer.from(await res.arrayBuffer());
       if (buf.length > 4000) {
         try {
-          return await sharp(buf)
-            .resize(requestedWidth, requestedHeight, { fit: 'cover' })
-            .sharpen({ sigma: 1.1 })
-            .modulate({ brightness: 1.02, saturation: 1.12 })
-            .jpeg({ quality: 95 })
-            .toBuffer();
+          const sharp = await getSharp();
+          if (sharp) {
+            return await sharp(buf)
+              .resize(requestedWidth, requestedHeight, { fit: 'cover' })
+              .sharpen({ sigma: 1.1 })
+              .modulate({ brightness: 1.02, saturation: 1.12 })
+              .jpeg({ quality: 95 })
+              .toBuffer();
+          }
+          return buf;
         } catch {
           return buf;
         }
@@ -627,7 +640,11 @@ export async function renderCleanImageBuffer(
     <circle cx="${requestedWidth / 2}" cy="${requestedHeight / 2}" r="${Math.min(requestedWidth, requestedHeight) / 3}" fill="#a855f7" opacity="0.2"/>
   </svg>`;
   try {
-    return await sharp(Buffer.from(svg)).jpeg({ quality: 90 }).toBuffer();
+    const sharp = await getSharp();
+    if (sharp) {
+      return await sharp(Buffer.from(svg)).jpeg({ quality: 90 }).toBuffer();
+    }
+    return Buffer.from(svg);
   } catch {
     return Buffer.from(svg);
   }

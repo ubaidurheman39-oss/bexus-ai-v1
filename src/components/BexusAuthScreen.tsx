@@ -58,6 +58,9 @@ export const BexusAuthScreen: React.FC<BexusAuthScreenProps> = ({ onLogin, isLig
         setErrorMessage('Google sign-in popup was closed. Please try again or use Guest Demo Access.');
       } else if (error.code === 'auth/popup-blocked') {
         setErrorMessage('Popup was blocked by your browser. Please allow popups or use Guest Demo Access.');
+      } else if (error.code === 'auth/unauthorized-domain') {
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+        setErrorMessage(`Domain "${host}" needs to be added under Firebase Console → Authentication → Settings → Authorized domains. You can also click "Continue as Guest" below right now!`);
       } else {
         setErrorMessage(error.message || 'Failed to sign in with Google');
       }
