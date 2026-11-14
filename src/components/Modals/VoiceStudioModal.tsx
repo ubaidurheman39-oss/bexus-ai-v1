@@ -227,7 +227,7 @@ export const VoiceStudioModal: React.FC<VoiceStudioModalProps> = ({
   const [dialogue, setDialogue] = useState<DialogueTurn[]>([
     {
       role: 'assistant',
-      text: 'Assalam o Alaikum! Main Bexus AI hoon. Aaj kya seekhna ya explore karna hai?',
+      text: 'Hello! I am Bexus AI. What would you like to learn, build, or explore today?',
       time: 'Just now'
     }
   ]);
@@ -396,8 +396,8 @@ export const VoiceStudioModal: React.FC<VoiceStudioModalProps> = ({
       { role: 'user', text: spokenQuery, time: nowTime }
     ]);
 
-    // Fast instant response for greetings & conversational small talk
-    const instantReply = generateNaturalConversationalReply(spokenQuery, { lang: selectedLang, voiceMode: true });
+    // Fast instant response for greetings & conversational small talk (strictly English)
+    const instantReply = generateNaturalConversationalReply(spokenQuery, { lang: 'English', voiceMode: true });
     const isSmallTalk = /^(how are you|hoy are you|how r u|how do you do|kese ho|kaise ho|kya hal|kya haal|sab theek|hello|hi|hey|salam|assalam|aoa|who are you|tum kon ho|what can you do|kya kar sakte ho|ok|theek hai|thank you|thanks|shukriya|time|date)/i.test(spokenQuery.trim());
 
     if (isSmallTalk) {
@@ -410,7 +410,7 @@ export const VoiceStudioModal: React.FC<VoiceStudioModalProps> = ({
     }
 
     try {
-      // Call chat API for questions or complex topics
+      // Call chat API for questions or complex topics (strictly English)
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -419,7 +419,8 @@ export const VoiceStudioModal: React.FC<VoiceStudioModalProps> = ({
             ...dialogue.slice(-6).map(d => ({ role: d.role, content: d.text })),
             { role: 'user', content: spokenQuery }
           ],
-          modelId: 'gemini-3.8-flash'
+          modelId: 'gemini-3.8-flash',
+          preferredLanguage: 'English'
         })
       });
 

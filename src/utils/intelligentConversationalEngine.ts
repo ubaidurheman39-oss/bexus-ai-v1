@@ -31,7 +31,8 @@ export function generateNaturalConversationalReply(
 ): string {
   const query = cleanQuery(rawQuery);
   const original = (rawQuery || '').trim();
-  const isUrdu = options?.lang === 'ur' || options?.lang === 'ur-roman' || /(kese|kaise|kya|hal|theek|batao|shukriya|kon|mera|ap|aap|bana|karo|bhai|yar|kahan|kyun|kis|tareekh|dost|shehar)/i.test(query);
+  const normalizedLang = (options?.lang || '').toLowerCase();
+  const isUrdu = normalizedLang === 'ur' || normalizedLang === 'ur-roman' || normalizedLang === 'urdu';
 
   // 1. Math Calculation Engine (evaluates 25*4, 100/4, 50+120, 15% of 200, etc.)
   const percentMatch = query.match(/([0-9.]+)\s*%\s*(of)?\s*([0-9.]+)/);
@@ -81,7 +82,9 @@ export function generateNaturalConversationalReply(
     query.includes('sab theek') ||
     query.includes('kya chal raha')
   ) {
-    return 'Main bilkul theek aur fresh hoon! Aap batayein, sab khairiat hai?';
+    return isUrdu
+      ? 'Main bilkul theek aur fresh hoon! Aap batayein, sab khairiat hai?'
+      : "I'm doing great, thank you! How can I help you today?";
   }
 
   if (/^(hello|hi|hey|hola)$/i.test(query)) {
@@ -91,7 +94,9 @@ export function generateNaturalConversationalReply(
   }
 
   if (/^(salam|assalam|assalam o alaikum|aoa)$/i.test(query)) {
-    return 'Walaikum Assalam! Bexus AI hazir hai, batayein aaj kya discuss ya create karein?';
+    return isUrdu
+      ? 'Walaikum Assalam! Bexus AI hazir hai, batayein aaj kya discuss ya create karein?'
+      : 'Hello! Bexus AI is here and ready. What would you like to discuss or build today?';
   }
 
   // 3. Identity & What Can You Do

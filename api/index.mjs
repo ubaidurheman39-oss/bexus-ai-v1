@@ -5109,7 +5109,8 @@ function cleanQuery(input) {
 function generateNaturalConversationalReply(rawQuery, options) {
   const query = cleanQuery(rawQuery);
   const original = (rawQuery || "").trim();
-  const isUrdu = options?.lang === "ur" || options?.lang === "ur-roman" || /(kese|kaise|kya|hal|theek|batao|shukriya|kon|mera|ap|aap|bana|karo|bhai|yar|kahan|kyun|kis|tareekh|dost|shehar)/i.test(query);
+  const normalizedLang = (options?.lang || "").toLowerCase();
+  const isUrdu = normalizedLang === "ur" || normalizedLang === "ur-roman" || normalizedLang === "urdu";
   const percentMatch = query.match(/([0-9.]+)\s*%\s*(of)?\s*([0-9.]+)/);
   if (percentMatch) {
     const pct = parseFloat(percentMatch[1]);
@@ -5135,13 +5136,13 @@ function generateNaturalConversationalReply(rawQuery, options) {
     return isUrdu ? "Main bilkul theek aur zabardast hoon! Aap sunayein, kya haal chaal hain?" : "I'm doing great, thank you! How are you doing today?";
   }
   if (query.includes("kese ho") || query.includes("kya hal") || query.includes("sab theek") || query.includes("kya chal raha")) {
-    return "Main bilkul theek aur fresh hoon! Aap batayein, sab khairiat hai?";
+    return isUrdu ? "Main bilkul theek aur fresh hoon! Aap batayein, sab khairiat hai?" : "I'm doing great, thank you! How can I help you today?";
   }
   if (/^(hello|hi|hey|hola)$/i.test(query)) {
     return isUrdu ? "Hello! Main Bexus AI hoon. Batayein aaj kis cheez me madad chahiye?" : "Hello! I am Bexus AI. What would you like to explore or work on today?";
   }
   if (/^(salam|assalam|assalam o alaikum|aoa)$/i.test(query)) {
-    return "Walaikum Assalam! Bexus AI hazir hai, batayein aaj kya discuss ya create karein?";
+    return isUrdu ? "Walaikum Assalam! Bexus AI hazir hai, batayein aaj kya discuss ya create karein?" : "Hello! Bexus AI is here and ready. What would you like to discuss or build today?";
   }
   if (query.includes("who are you") || query.includes("what are you") || query.includes("tum kon ho") || query.includes("aap kon") || query.includes("who made you") || query.includes("kis ne banaya")) {
     return isUrdu ? "Main Bexus AI hoon \u2014 aapka smart AI assistant jo sawalaat ke jawab deta hai, 8K realistic images generate karta hai, songs banata hai aur coding karta hai." : "I am Bexus AI, an intelligent AI assistant built to answer questions, generate 8K photorealistic imagery, compose original music, and write clean code.";

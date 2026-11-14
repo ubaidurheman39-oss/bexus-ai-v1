@@ -29,7 +29,7 @@ export const INITIAL_WELCOME_CHAT = (userId: string, userName: string): ChatSess
       role: 'assistant',
       content: `### Welcome to Bexus AI Workspace, **${userName}**! ⚡
 
-Aapka account ready hai! You can talk to me in **English**, **Roman Urdu** (اردو), or any language of your choice — I will automatically respond in the exact language you use.
+Your workspace is ready! Ask me anything in English—I am here to help you with answers, code, research, imagery, and audio.
 
 Key capabilities at your fingertips:
 - 🧠 **Deep Reasoning & Code**: Instant coding, debugging, logic & problem solving.
@@ -37,11 +37,11 @@ Key capabilities at your fingertips:
 - 🎵 **Music Studio**: Ambient synth loops, chords & generative audio.
 - ⚡ **Live Canvas**: Real-time frontend HTML/React preview sandbox.
 
-Ask a question in English or Urdu below to begin!`,
+Ask any question below to get started!`,
       timestamp: Date.now(),
       thinkingSteps: [
         'Initialized secure personal user workspace',
-        'Enabled automatic dynamic language detection (English / Roman Urdu / Urdu)',
+        'Configured crisp English-first intelligence mode',
         'System ready for user prompts'
       ],
       thinkingTimeSec: 0.5
