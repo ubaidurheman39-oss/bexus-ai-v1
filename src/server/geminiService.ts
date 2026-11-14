@@ -435,6 +435,8 @@ export function sanitizeAndCleanPrompt(rawPrompt: string): SanitizedPromptResult
     .replace(/\bsher\b/gi, 'lion')
     .replace(/\bbilli\b/gi, 'cat')
     .replace(/\bkutta\b/gi, 'dog')
+    .replace(/\bbakri\b/gi, 'goat')
+    .replace(/\bbakra\b/gi, 'goat')
     .trim();
 
   const lower = text.toLowerCase();
@@ -752,12 +754,13 @@ async function runAiHordeDiffusion(
 
     const models =
       style === 'anime'
-        ? ['Nova Anime XL', 'Abyss OrangeMix', 'Deliberate']
+        ? ['Nova Anime XL', 'Abyss OrangeMix', 'Deliberate', 'stable_diffusion']
         : [
             "ICBINP - I Can't Believe It's Not Photography",
             'AbsoluteReality',
             'Deliberate',
             'majicMIX realistic',
+            'stable_diffusion',
           ];
 
     const submitRes = await fetchWithTimeout(
@@ -774,7 +777,7 @@ async function runAiHordeDiffusion(
           params: {
             width: dims.width,
             height: dims.height,
-            steps: 18,
+            steps: 14,
             cfg_scale: 7,
             sampler_name: 'k_euler_a',
             seed: String(Math.abs(Math.floor(seed)) % 2147483647),
@@ -794,8 +797,8 @@ async function runAiHordeDiffusion(
     const jobId = submitJson?.id;
     if (!jobId) return null;
 
-    // Poll up to ~28s for generation result
-    const deadline = Date.now() + 28000;
+    // Poll up to ~32s for generation result
+    const deadline = Date.now() + 32000;
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 2000));
       const statusRes = await fetchWithTimeout(
@@ -827,6 +830,50 @@ async function runAiHordeDiffusion(
   }
 }
 
+async function searchWikimediaBitmapBuffer(
+  subjectQuery: string,
+  requestedWidth: number,
+  requestedHeight: number
+): Promise<Buffer | null> {
+  try {
+    const clean = (subjectQuery || '').trim();
+    if (!clean) return null;
+    const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(
+      `filetype:bitmap ${clean}`
+    )}&gsrnamespace=6&gsrlimit=4&prop=imageinfo&iiprop=url|mime|size&format=json`;
+    const res = await fetchWithTimeout(url, { headers: { 'User-Agent': 'BexusAI/1.0' } }, 8000);
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    const pages = Object.values(data?.query?.pages || {}) as any[];
+    for (const page of pages) {
+      const info = page?.imageinfo?.[0];
+      const mime = String(info?.mime || '');
+      const imgUrl = String(info?.url || '');
+      if (!imgUrl || (!mime.includes('jpeg') && !mime.includes('png') && !mime.includes('webp'))) continue;
+      const imgRes = await fetchWithTimeout(imgUrl, { headers: { 'User-Agent': 'BexusAI/1.0' } }, 10000);
+      if (!imgRes.ok) continue;
+      const buf = Buffer.from(await imgRes.arrayBuffer());
+      if (buf.length > 5000) {
+        try {
+          const sharp = await getSharp();
+          if (sharp) {
+            return await sharp(buf)
+              .resize(requestedWidth, requestedHeight, { fit: 'cover' })
+              .jpeg({ quality: 92 })
+              .toBuffer();
+          }
+        } catch {
+          return buf;
+        }
+        return buf;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 async function generateNeuralDiffusionBuffer(
   diffusionPrompt: string,
   width: number,
@@ -843,7 +890,7 @@ async function generateNeuralDiffusionBuffer(
   const fluxBuffer = await runGradioImageSpace(
     'https://black-forest-labs-flux-1-schnell.hf.space',
     [diffusionPrompt, safeSeed, false, w, h, 4],
-    18000
+    14000
   );
   if (fluxBuffer) {
     return { buffer: fluxBuffer, engine: 'FLUX.1 Realism Ultra 8K' };
@@ -875,7 +922,7 @@ async function generateNeuralDiffusionBuffer(
       0,
       4,
     ],
-    18000
+    14000
   );
   if (sd35Buffer) {
     return { buffer: sd35Buffer, engine: 'Bexus SD 3.5 Turbo 8K' };
@@ -890,9 +937,11 @@ export async function renderCleanImageBuffer(
   requestedWidth = 1280,
   requestedHeight = 720,
   seed?: number,
-  negativePrompt?: string
+  negativePrompt?: string,
+  fallbackSubject?: string
 ): Promise<Buffer> {
   let finalPrompt = rawPrompt.trim();
+  const cleanSubject = (fallbackSubject || sanitizeAndCleanPrompt(rawPrompt).cleanedPrompt).trim();
   const lowerRaw = finalPrompt.toLowerCase();
   const looksEnhanced =
     finalPrompt.length >= 65 &&
@@ -928,8 +977,14 @@ export async function renderCleanImageBuffer(
     return neuralResult.buffer;
   }
 
-  // 2. Curated Visual Database Fallback (only if neural endpoints are temporarily unreachable)
-  const photoUrl = getKeywordFallbackImageUrl(rawPrompt, requestedWidth);
+  // 2. Dynamic Subject Search Fallback (only if all neural engines fail, using clean user subject)
+  const wikiBuf = await searchWikimediaBitmapBuffer(cleanSubject, requestedWidth, requestedHeight);
+  if (wikiBuf && wikiBuf.length > 5000) {
+    return wikiBuf;
+  }
+
+  // 3. Curated Visual Database Fallback (strictly keyed on clean user subject, never expanded adjectives)
+  const photoUrl = getKeywordFallbackImageUrl(cleanSubject, requestedWidth);
   try {
     const res = await fetchWithTimeout(
       photoUrl,
@@ -959,7 +1014,7 @@ export async function renderCleanImageBuffer(
     // Continue cleanly to procedural high-res canvas
   }
 
-  // 3. Procedural high-res artistic canvas (zero crash, zero limits)
+  // 4. Procedural high-res artistic canvas (zero crash, zero limits)
   const svg = `<svg width="${requestedWidth}" height="${requestedHeight}" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -1026,7 +1081,7 @@ export async function generateImageContent(
 
   const seed = Math.floor(Math.random() * 99999999);
 
-  // 1. Generate genuine custom AI image buffer directly from FLUX.1-schnell / SD3.5 Turbo
+  // 1. Generate genuine custom AI image buffer directly from FLUX.1-schnell / AI Horde / SD3.5 Turbo
   try {
     const cleanBuffer = await renderCleanImageBuffer(
       finalPrompt,
@@ -1034,7 +1089,8 @@ export async function generateImageContent(
       width,
       height,
       seed,
-      negativePrompt
+      negativePrompt,
+      sanitized.cleanedPrompt
     );
     if (cleanBuffer && cleanBuffer.length > 5000) {
       const mimeType = detectImageMimeType(cleanBuffer);
