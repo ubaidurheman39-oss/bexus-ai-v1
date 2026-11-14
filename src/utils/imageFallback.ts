@@ -8,7 +8,7 @@
 export function normalizePromptTypos(rawPrompt: string): string {
   let text = (rawPrompt || '').trim();
   const prefixes = [
-    /^(please\s+)?(can\s+you\s+)?(make|create|generate|render|draw|build|paint|give\s+me|show\s+me)\s+(an?\s+)?(ai\s+)?(image|imge|pic|picture|photo|wallpaper|artwork|render|masterpiece|graphic)\s+(of|for|about)?\s+/i,
+    /^(please\s+)?(can\s+you\s+)?(m?ake|create|generate|render|draw|build|paint|give\s+me|show\s+me)\s+(an?\s+)?(ai\s+)?(image|imge|pic|picture|photo|wallpaper|artwork|render|masterpiece|graphic)\s+(of|for|about)?\s+/i,
     /^(ai\s+)?(image|imge|picture|pic|photo|wallpaper)\s+(of|for|about)?\s+/i,
     /^(draw|render|paint|sketch)\s+(an?\s+)?(image|picture|photo)?\s+(of)?\s+/i,
     /^(i\s+want\s+(an?\s+)?(image|imge|pic|picture)\s+(of)?)\s+/i,
@@ -78,7 +78,6 @@ export function normalizePromptTypos(rawPrompt: string): string {
 const VISUAL_COLLECTIONS = {
   // 1. Gas / Petrol Stations with Supercars at Night
   automotiveGasStation: [
-    'https://images.unsplash.com/photo-1542282088-72c9c27ed0cd',
     'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8',
     'https://images.unsplash.com/photo-1525609004556-c46c7d6cf023',
     'https://images.unsplash.com/photo-1563720223185-11003d516935',
@@ -96,18 +95,17 @@ const VISUAL_COLLECTIONS = {
 
   // 3. Audi
   audi: [
+    'https://images.unsplash.com/photo-1580273916550-e323be2ae537',
     'https://images.unsplash.com/photo-1606664515524-ed2f786a0bd6',
     'https://images.unsplash.com/photo-1605559424843-9e4c228bf1c2',
     'https://images.unsplash.com/photo-1502877338535-766e1452684a',
-    'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8',
   ],
 
   // 4. BMW
   bmw: [
     'https://images.unsplash.com/photo-1555215695-3004980ad54e',
-    'https://images.unsplash.com/photo-1580273916550-e323be2ae537',
-    'https://images.unsplash.com/photo-1542282088-72c9c27ed0cd',
-    'https://images.unsplash.com/photo-1617814076367-b759c7d7e738',
+    'https://images.unsplash.com/photo-1617531653332-bd46c24f2068',
+    'https://images.unsplash.com/photo-1556189250-72ba954cfc2b',
   ],
 
   // 5. Porsche, Ferrari, Lamborghini & Hypercars
@@ -116,7 +114,6 @@ const VISUAL_COLLECTIONS = {
     'https://images.unsplash.com/photo-1614162692292-7ac56d7f7f1e',
     'https://images.unsplash.com/photo-1603584173870-7f23fdae1b7a',
     'https://images.unsplash.com/photo-1552519507-da3b142c6e3d',
-    'https://images.unsplash.com/photo-1542282088-72c9c27ed0cd',
     'https://images.unsplash.com/photo-1580273916550-e323be2ae537',
   ],
 

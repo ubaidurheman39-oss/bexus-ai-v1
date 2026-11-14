@@ -3,7 +3,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import compression from 'compression';
-import { generateChatResponse, generateImageContent, enhancePromptWithAI, renderCleanImageBuffer, composeSongWithAI, generateMindMapWithAI, runDeepResearchWithAI, generateSpeechWithGemini, pcmToWav, translateTextWithAI, summarizeDocumentWithAI, generateSlideDeckWithAI, generateAppWithAI, generateVideoProjectWithAI, analyzeCameraFrameWithAI, analyzeMediaWithAI, executeAgenticTaskWithAI } from './src/server/geminiService.ts';
+import { generateChatResponse, generateImageContent, enhancePromptWithAI, renderCleanImageBuffer, detectImageMimeType, composeSongWithAI, generateMindMapWithAI, runDeepResearchWithAI, generateSpeechWithGemini, pcmToWav, translateTextWithAI, summarizeDocumentWithAI, generateSlideDeckWithAI, generateAppWithAI, generateVideoProjectWithAI, analyzeCameraFrameWithAI, analyzeMediaWithAI, executeAgenticTaskWithAI } from './src/server/geminiService.ts';
 import { generateWorldClassApp } from './src/utils/worldClassAppTemplates.ts';
 import { scrapeUrlAndBuildTable, auditWebpageSeo, executeGitHubAction, executeNaturalAction } from './src/server/actionRunnerService.ts';
 
@@ -194,10 +194,12 @@ app.get('/api/image/render', async (req, res) => {
     const style = (req.query.style as string) || 'photorealistic';
     const width = Math.min(1920, Math.max(256, Number(req.query.width) || 1024));
     const height = Math.min(1920, Math.max(256, Number(req.query.height) || 1024));
+    const seed = req.query.seed ? Number(req.query.seed) : undefined;
 
-    const imageBuffer = await renderCleanImageBuffer(prompt, style, width, height);
+    const imageBuffer = await renderCleanImageBuffer(prompt, style, width, height, seed);
+    const mimeType = detectImageMimeType(imageBuffer);
 
-    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Content-Type', mimeType);
     res.setHeader('Content-Length', imageBuffer.length.toString());
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.setHeader('Accept-Ranges', 'bytes');

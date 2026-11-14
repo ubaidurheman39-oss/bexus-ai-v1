@@ -110,7 +110,7 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
   // Helper to sanitize prompt from conversational chatter and typos
   const cleanPromptText = (raw: string) => {
     return raw
-      .replace(/^(please\s+)?(can\s+you\s+)?(make|create|generate|render|draw|build|paint|give\s+me|show\s+me)\s+(an?\s+)?(ai\s+)?(image|imge|pic|picture|photo|wallpaper|artwork|render)\s+(of|for|about)?\s+/i, '')
+      .replace(/^(please\s+)?(can\s+you\s+)?(m?ake|create|generate|render|draw|build|paint|give\s+me|show\s+me)\s+(an?\s+)?(ai\s+)?(image|imge|pic|picture|photo|wallpaper|artwork|render)\s+(of|for|about)?\s+/i, '')
       .replace(/^(ai\s+)?(image|imge|picture|pic|photo|wallpaper)\s+(of|for|about)?\s+/i, '')
       .replace(/\bimge\b/gi, 'image')
       .replace(/\bpic\b/gi, 'picture')
@@ -174,7 +174,7 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
     sounds.playClick();
     setIsGenerating(true);
 
-    const effectiveRatio = (isAutomotive && selectedRatio === '1:1') ? '16:9' : selectedRatio;
+    const effectiveRatio = selectedRatio;
     const effectiveCamera = (isAutomotive && isDynamicMotion) ? '35mm action tracking rig (rolling shot)' : selectedCamera;
     const effectiveLighting = isRainOrNight ? 'wet asphalt reflections & rainy night' : selectedLighting;
 
@@ -414,7 +414,7 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
                       <span className="text-[10px] text-zinc-400 hidden sm:inline">• Pacing chase rig & wheel motion blur applied</span>
                     </div>
                     <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-200 border border-orange-500/30 font-mono">
-                      16:9 Widescreen
+                      {selectedRatio} Mode
                     </span>
                   </div>
                 )}
@@ -602,7 +602,7 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
                           href={currentImage.url}
                           target="_blank"
                           rel="noreferrer"
-                          download={`bexus-art-${Date.now()}.png`}
+                          download={`bexus-art-${Date.now()}.${currentImage.url.startsWith('data:image/webp') ? 'webp' : currentImage.url.startsWith('data:image/jpeg') ? 'jpg' : 'png'}`}
                           className="p-2.5 rounded-xl bg-zinc-800/90 border border-white/[0.08] hover:bg-zinc-700 text-zinc-200 text-xs transition-colors cursor-pointer"
                           title="Download Image"
                         >
