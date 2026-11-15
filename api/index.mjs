@@ -5205,15 +5205,21 @@ function getAIClient() {
 }
 var ai = getAIClient();
 async function fetchInstantWebKnowledge(query) {
-  const cleanQ = (query || "").replace(/^(what is|who is|where is|explain|tell me about|define|how does|why does|describe)\s+/i, "").replace(/[?!.]+$/g, "").trim();
+  const raw = (query || "").trim();
+  const isTroubleshootingOrPersonal = /\b(i have|my |not working|stopped working|broken|won't|wont|doesn't|doesnt|can't|cant|fix|solve|issue|problem|error|bug|help me|months? ago|days? ago|years? ago|charging|turn on)\b/i.test(raw);
+  const isFactualQuestion = /^(what is|what are|who is|who was|where is|explain|tell me about|define|meaning of|capital of|history of)\b/i.test(raw) || raw.split(/\s+/).length <= 3;
+  if (isTroubleshootingOrPersonal || !isFactualQuestion) {
+    return null;
+  }
+  const cleanQ = raw.replace(/^(what is|what are|who is|who was|where is|explain|tell me about|define|meaning of|history of)\s+/i, "").replace(/[?!.]+$/g, "").trim();
   if (!cleanQ || cleanQ.length < 2) return null;
   try {
     const [ddgRes, wikiSearchRes] = await Promise.allSettled([
       fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(cleanQ)}&format=json&no_html=1&skip_disambig=1`, {
-        signal: AbortSignal.timeout(2200)
+        signal: AbortSignal.timeout(2e3)
       }).then((r) => r.ok ? r.json() : null),
       fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanQ)}&srlimit=1&format=json&origin=*`, {
-        signal: AbortSignal.timeout(2200)
+        signal: AbortSignal.timeout(2e3)
       }).then((r) => r.ok ? r.json() : null)
     ]);
     if (ddgRes.status === "fulfilled" && ddgRes.value) {
@@ -5226,7 +5232,7 @@ async function fetchInstantWebKnowledge(query) {
     if (wikiSearchRes.status === "fulfilled" && wikiSearchRes.value?.query?.search?.[0]?.title) {
       const topTitle = wikiSearchRes.value.query.search[0].title;
       const sumRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topTitle)}`, {
-        signal: AbortSignal.timeout(2200)
+        signal: AbortSignal.timeout(2e3)
       });
       if (sumRes.ok) {
         const sumData = await sumRes.json();
@@ -5240,11 +5246,25 @@ async function fetchInstantWebKnowledge(query) {
   }
   return null;
 }
+function cleanOpenLlmOutput(raw) {
+  let out = (raw || "").replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<\/?think>/gi, "").trim();
+  if (/^here['’]?s a thinking process:/i.test(out)) {
+    const splitMatch = out.match(/\n\n(?=(?:[A-Z]|1\.|###|\*\*)[^{\n]*)/);
+    if (splitMatch && splitMatch.index !== void 0) {
+      const paragraphs = out.split(/\n{2,}/).filter((p) => !/^(here['’]?s a thinking process:|1\.\s*\*\*analyze|-\s*\*\*user|-\s*\*\*goal|-\s*\*\*constraint)/i.test(p.trim()));
+      if (paragraphs.length > 0) {
+        out = paragraphs.join("\n\n").trim();
+      }
+    }
+  }
+  return out.replace(/^(Assistant:|Bexus AI:)\s*/i, "").replace(/\nUser:[\s\S]*$/i, "").trim();
+}
 async function runAiHordeTextSolver(messages, preferredLanguage) {
+  const deadline = Date.now() + 7500;
   try {
     const targetLang = preferredLanguage && preferredLanguage.toLowerCase() !== "english" ? preferredLanguage : "English";
-    const historyBlock = messages.slice(-4).map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content.slice(0, 600)}`).join("\n");
-    const prompt = `System: You are Bexus AI, an expert problem-solver and helpful assistant. Give an accurate, clear, step-by-step, practical answer strictly in ${targetLang}. Be concise, direct, and solve the exact user problem without filler.
+    const historyBlock = messages.slice(-4).map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content.slice(0, 500)}`).join("\n");
+    const prompt = `System: You are Bexus AI, an expert problem-solver and helpful assistant. Give an accurate, clear, step-by-step, practical answer strictly in ${targetLang}. Do NOT show internal thinking steps\u2014output only the direct helpful answer.
 ${historyBlock}
 Assistant:`;
     const submitRes = await fetch("https://aihorde.net/api/v2/generate/text/async", {
@@ -5258,34 +5278,34 @@ Assistant:`;
         prompt,
         params: {
           max_context_length: 1024,
-          max_length: 260,
+          max_length: 200,
           temperature: 0.35,
-          stop_sequence: ["\nUser:", "User:", "System:"]
+          stop_sequence: ["\nUser:", "User:", "System:", "<|im_end|>"]
         }
       }),
-      signal: AbortSignal.timeout(4e3)
+      signal: AbortSignal.timeout(2500)
     });
     if (!submitRes.ok) return null;
     const submitData = await submitRes.json();
     const jobId = submitData?.id;
     if (!jobId) return null;
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < 10500) {
-      await new Promise((resolve) => setTimeout(resolve, 750));
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const remaining = deadline - Date.now();
+      if (remaining <= 200) break;
       const pollRes = await fetch(`https://aihorde.net/api/v2/generate/text/status/${jobId}`, {
-        signal: AbortSignal.timeout(2500)
+        signal: AbortSignal.timeout(Math.min(2e3, remaining))
       });
       if (!pollRes.ok) continue;
       const pollData = await pollRes.json();
       if (pollData?.done && pollData?.generations?.[0]?.text) {
-        const raw = String(pollData.generations[0].text).trim();
-        const cleaned = raw.replace(/^(Assistant:|Bexus AI:)\s*/i, "").replace(/\nUser:[\s\S]*$/i, "").trim();
+        const cleaned = cleanOpenLlmOutput(String(pollData.generations[0].text));
         if (cleaned.length >= 20) {
           return cleaned;
         }
         return null;
       }
-      if (pollData?.faulted || pollData?.wait_time && pollData.wait_time > 25) {
+      if (pollData?.faulted || pollData?.wait_time && pollData.wait_time > 20) {
         return null;
       }
     }
@@ -5493,7 +5513,7 @@ ${att.extractedText}
   if (wantsFreshWebInfo) {
     baseConfig.tools = [{ googleSearch: {} }];
   }
-  const baseModels = ["gemini-4-hydrogen", "gemini-3.1-flash-lite"];
+  const baseModels = isReasoning ? ["gemini-4-hydrogen", "gemini-3.1-flash-lite"] : ["gemini-3.1-flash-lite", "gemini-4-hydrogen"];
   const modelsToTry = getPrioritizedModels(baseModels);
   const activeClient = getAIClient();
   const instantReply = tryInstantDirectReply(lastUserQuery, {
@@ -5529,7 +5549,7 @@ ${att.extractedText}
           thinkingLevel: ThinkingLevel.MINIMAL
         };
       }
-      const timeoutMs = isReasoning || wantsFreshWebInfo ? 2e4 : 12e3;
+      const timeoutMs = isReasoning || wantsFreshWebInfo ? 14e3 : 6500;
       let response;
       try {
         response = await Promise.race([
@@ -5543,9 +5563,9 @@ ${att.extractedText}
           )
         ]);
       } catch (firstErr) {
-        if (modelConfig.tools || modelConfig.thinkingConfig) {
+        const isTimeout = String(firstErr?.message || "").includes("Timeout");
+        if (!isTimeout && modelConfig.tools) {
           delete modelConfig.tools;
-          delete modelConfig.thinkingConfig;
           response = await Promise.race([
             activeClient.models.generateContent({
               model,
@@ -5615,9 +5635,9 @@ async function generateChatResponseStream(req, onChunk) {
     return { fullText: instantReply, groundingSources: [], isReasoning: false };
   }
   if (!process.env.GEMINI_API_KEY) {
-    const fallbackText = await resolveIntelligentFallbackAnswer(req);
-    onChunk(fallbackText);
-    return { fullText: fallbackText, groundingSources: [], isReasoning: false };
+    const fallbackText2 = await resolveIntelligentFallbackAnswer(req);
+    onChunk(fallbackText2);
+    return { fullText: fallbackText2, groundingSources: [], isReasoning: false };
   }
   const isReasoning = req.modelId === "bexus-reasoning-pro" || !!req.enableReasoning;
   const activeClient = getAIClient();
@@ -5654,7 +5674,9 @@ ${att.extractedText}
     contents.push({ role: "user", parts: [{ text: "Hello" }] });
   }
   const wantsFreshWebInfo = req.enableSearch || req.enableDeepResearch || /\b(latest|today|current|news|price|weather|score|winner|2025|2026|right now|live)\b/i.test(lastUserQuery);
-  const modelsToTry = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
+  const modelsToTry = getPrioritizedModels(
+    isReasoning ? ["gemini-4-hydrogen", "gemini-3.1-flash-lite"] : ["gemini-3.1-flash-lite", "gemini-4-hydrogen"]
+  );
   for (const model of modelsToTry) {
     let streamedText = "";
     try {
@@ -5667,11 +5689,17 @@ ${att.extractedText}
       if (wantsFreshWebInfo) {
         modelConfig.tools = [{ googleSearch: {} }];
       }
-      const streamResult = await activeClient.models.generateContentStream({
-        model,
-        contents,
-        config: modelConfig
-      });
+      const openTimeoutMs = isReasoning ? 12e3 : 6500;
+      const streamResult = await Promise.race([
+        activeClient.models.generateContentStream({
+          model,
+          contents,
+          config: modelConfig
+        }),
+        new Promise(
+          (_, reject) => setTimeout(() => reject(new Error(`Stream open timeout on ${model}`)), openTimeoutMs)
+        )
+      ]);
       let lastCandidates = null;
       for await (const chunk of streamResult) {
         const piece = chunk.text || "";
@@ -5703,14 +5731,14 @@ ${att.extractedText}
       }
     }
   }
-  const fallback = await generateChatResponse(req);
-  if (fallback.text) {
-    onChunk(fallback.text);
+  const fallbackText = await resolveIntelligentFallbackAnswer(req);
+  if (fallbackText) {
+    onChunk(fallbackText);
   }
   return {
-    fullText: fallback.text,
-    groundingSources: fallback.groundingSources || [],
-    isReasoning: fallback.isReasoning
+    fullText: fallbackText,
+    groundingSources: [],
+    isReasoning: false
   };
 }
 function sanitizeAndCleanPrompt(rawPrompt) {
@@ -8678,7 +8706,7 @@ var PORT = resolvePort();
 app.use(compression({
   threshold: 512,
   filter: (req, res) => {
-    if (req.headers["x-no-compression"]) {
+    if (req.headers["x-no-compression"] || req.path === "/api/chat/stream" || req.originalUrl.includes("/chat/stream")) {
       return false;
     }
     return compression.filter(req, res);

@@ -45,8 +45,17 @@ const ai = getAIClient();
  * Used alongside live LLM solvers whenever GEMINI_API_KEY is missing or exhausted.
  */
 async function fetchInstantWebKnowledge(query: string): Promise<string | null> {
-  const cleanQ = (query || '')
-    .replace(/^(what is|who is|where is|explain|tell me about|define|how does|why does|describe)\s+/i, '')
+  const raw = (query || '').trim();
+  // Only use Wikipedia/DuckDuckGo for genuine factual/definitional lookups, NOT personal problems or troubleshooting
+  const isTroubleshootingOrPersonal = /\b(i have|my |not working|stopped working|broken|won't|wont|doesn't|doesnt|can't|cant|fix|solve|issue|problem|error|bug|help me|months? ago|days? ago|years? ago|charging|turn on)\b/i.test(raw);
+  const isFactualQuestion = /^(what is|what are|who is|who was|where is|explain|tell me about|define|meaning of|capital of|history of)\b/i.test(raw) || raw.split(/\s+/).length <= 3;
+
+  if (isTroubleshootingOrPersonal || !isFactualQuestion) {
+    return null;
+  }
+
+  const cleanQ = raw
+    .replace(/^(what is|what are|who is|who was|where is|explain|tell me about|define|meaning of|history of)\s+/i, '')
     .replace(/[?!.]+$/g, '')
     .trim();
   if (!cleanQ || cleanQ.length < 2) return null;
@@ -54,10 +63,10 @@ async function fetchInstantWebKnowledge(query: string): Promise<string | null> {
   try {
     const [ddgRes, wikiSearchRes] = await Promise.allSettled([
       fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(cleanQ)}&format=json&no_html=1&skip_disambig=1`, {
-        signal: AbortSignal.timeout(2200),
+        signal: AbortSignal.timeout(2000),
       }).then(r => (r.ok ? r.json() : null)),
       fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanQ)}&srlimit=1&format=json&origin=*`, {
-        signal: AbortSignal.timeout(2200),
+        signal: AbortSignal.timeout(2000),
       }).then(r => (r.ok ? r.json() : null)),
     ]);
 
@@ -72,7 +81,7 @@ async function fetchInstantWebKnowledge(query: string): Promise<string | null> {
     if (wikiSearchRes.status === 'fulfilled' && wikiSearchRes.value?.query?.search?.[0]?.title) {
       const topTitle = wikiSearchRes.value.query.search[0].title;
       const sumRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topTitle)}`, {
-        signal: AbortSignal.timeout(2200),
+        signal: AbortSignal.timeout(2000),
       });
       if (sumRes.ok) {
         const sumData: any = await sumRes.json();
@@ -89,21 +98,48 @@ async function fetchInstantWebKnowledge(query: string): Promise<string | null> {
 }
 
 /**
+ * Strip leaked chain-of-thought blocks (e.g. <think>...</think> or "Here's a thinking process:")
+ */
+function cleanOpenLlmOutput(raw: string): string {
+  let out = (raw || '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\/?think>/gi, '')
+    .trim();
+
+  if (/^here['’]?s a thinking process:/i.test(out)) {
+    const splitMatch = out.match(/\n\n(?=(?:[A-Z]|1\.|###|\*\*)[^{\n]*)/);
+    if (splitMatch && splitMatch.index !== undefined) {
+      // Look for the actual final answer section after numbered analysis if present
+      const paragraphs = out.split(/\n{2,}/).filter(p => !/^(here['’]?s a thinking process:|1\.\s*\*\*analyze|-\s*\*\*user|-\s*\*\*goal|-\s*\*\*constraint)/i.test(p.trim()));
+      if (paragraphs.length > 0) {
+        out = paragraphs.join('\n\n').trim();
+      }
+    }
+  }
+
+  return out
+    .replace(/^(Assistant:|Bexus AI:)\s*/i, '')
+    .replace(/\nUser:[\s\S]*$/i, '')
+    .trim();
+}
+
+/**
  * Keyless open LLM fallback solver (AI Horde text inference) for real problem-solving
- * when GEMINI_API_KEY is not configured in an external host like Vercel.
+ * Bounded strictly under 7.8s so serverless platforms like Vercel Hobby never hit 10s 504 timeouts.
  */
 async function runAiHordeTextSolver(
   messages: Array<{ role: string; content: string }>,
   preferredLanguage?: string
 ): Promise<string | null> {
+  const deadline = Date.now() + 7500;
   try {
     const targetLang = preferredLanguage && preferredLanguage.toLowerCase() !== 'english' ? preferredLanguage : 'English';
     const historyBlock = messages
       .slice(-4)
-      .map(m => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content.slice(0, 600)}`)
+      .map(m => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content.slice(0, 500)}`)
       .join('\n');
 
-    const prompt = `System: You are Bexus AI, an expert problem-solver and helpful assistant. Give an accurate, clear, step-by-step, practical answer strictly in ${targetLang}. Be concise, direct, and solve the exact user problem without filler.\n${historyBlock}\nAssistant:`;
+    const prompt = `System: You are Bexus AI, an expert problem-solver and helpful assistant. Give an accurate, clear, step-by-step, practical answer strictly in ${targetLang}. Do NOT show internal thinking steps—output only the direct helpful answer.\n${historyBlock}\nAssistant:`;
 
     const submitRes = await fetch('https://aihorde.net/api/v2/generate/text/async', {
       method: 'POST',
@@ -116,12 +152,12 @@ async function runAiHordeTextSolver(
         prompt,
         params: {
           max_context_length: 1024,
-          max_length: 260,
+          max_length: 200,
           temperature: 0.35,
-          stop_sequence: ['\nUser:', 'User:', 'System:'],
+          stop_sequence: ['\nUser:', 'User:', 'System:', '<|im_end|>'],
         },
       }),
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(2500),
     });
 
     if (!submitRes.ok) return null;
@@ -129,28 +165,29 @@ async function runAiHordeTextSolver(
     const jobId = submitData?.id;
     if (!jobId) return null;
 
-    const startedAt = Date.now();
-    while (Date.now() - startedAt < 10500) {
-      await new Promise(resolve => setTimeout(resolve, 750));
+    while (Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const remaining = deadline - Date.now();
+      if (remaining <= 200) break;
+
       const pollRes = await fetch(`https://aihorde.net/api/v2/generate/text/status/${jobId}`, {
-        signal: AbortSignal.timeout(2500),
+        signal: AbortSignal.timeout(Math.min(2000, remaining)),
       });
       if (!pollRes.ok) continue;
       const pollData: any = await pollRes.json();
       if (pollData?.done && pollData?.generations?.[0]?.text) {
-        const raw = String(pollData.generations[0].text).trim();
-        const cleaned = raw.replace(/^(Assistant:|Bexus AI:)\s*/i, '').replace(/\nUser:[\s\S]*$/i, '').trim();
+        const cleaned = cleanOpenLlmOutput(String(pollData.generations[0].text));
         if (cleaned.length >= 20) {
           return cleaned;
         }
         return null;
       }
-      if (pollData?.faulted || (pollData?.wait_time && pollData.wait_time > 25)) {
+      if (pollData?.faulted || (pollData?.wait_time && pollData.wait_time > 20)) {
         return null;
       }
     }
   } catch {
-    // Timeout or network error
+    // Timeout or network error within safe budget
   }
   return null;
 }
@@ -424,8 +461,10 @@ The user is browsing as an anonymous guest (no account signed in).
     baseConfig.tools = [{ googleSearch: {} }];
   }
 
-  // Official active Gemini models per @google/genai guidelines: gemini-4-hydrogen (fast & smart) + gemini-3.1-flash-lite
-  const baseModels = ['gemini-4-hydrogen', 'gemini-3.1-flash-lite'];
+  // Official active Gemini models: fast minimal-thinking flash-lite for sub-second speed, gemini-4-hydrogen for deep reasoning
+  const baseModels = isReasoning
+    ? ['gemini-4-hydrogen', 'gemini-3.1-flash-lite']
+    : ['gemini-3.1-flash-lite', 'gemini-4-hydrogen'];
   const modelsToTry = getPrioritizedModels(baseModels);
   const activeClient = getAIClient();
 
@@ -468,7 +507,7 @@ The user is browsing as an anonymous guest (no account signed in).
         };
       }
 
-      const timeoutMs = isReasoning || wantsFreshWebInfo ? 20000 : 12000;
+      const timeoutMs = isReasoning || wantsFreshWebInfo ? 14000 : 6500;
 
       let response: any;
       try {
@@ -483,9 +522,9 @@ The user is browsing as an anonymous guest (no account signed in).
           ),
         ]);
       } catch (firstErr: any) {
-        if (modelConfig.tools || modelConfig.thinkingConfig) {
+        const isTimeout = String(firstErr?.message || '').includes('Timeout');
+        if (!isTimeout && modelConfig.tools) {
           delete modelConfig.tools;
-          delete modelConfig.thinkingConfig;
           response = await Promise.race([
             activeClient.models.generateContent({
               model,
@@ -621,7 +660,9 @@ ${req.customInstructions ? `\nCustom Instructions: ${req.customInstructions}` : 
     req.enableDeepResearch ||
     /\b(latest|today|current|news|price|weather|score|winner|2025|2026|right now|live)\b/i.test(lastUserQuery);
 
-  const modelsToTry = getPrioritizedModels(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
+  const modelsToTry = getPrioritizedModels(
+    isReasoning ? ['gemini-4-hydrogen', 'gemini-3.1-flash-lite'] : ['gemini-3.1-flash-lite', 'gemini-4-hydrogen']
+  );
 
   for (const model of modelsToTry) {
     let streamedText = '';
@@ -641,11 +682,17 @@ ${req.customInstructions ? `\nCustom Instructions: ${req.customInstructions}` : 
         modelConfig.tools = [{ googleSearch: {} }];
       }
 
-      const streamResult = await activeClient.models.generateContentStream({
-        model,
-        contents,
-        config: modelConfig,
-      });
+      const openTimeoutMs = isReasoning ? 12000 : 6500;
+      const streamResult = await Promise.race([
+        activeClient.models.generateContentStream({
+          model,
+          contents,
+          config: modelConfig,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Stream open timeout on ${model}`)), openTimeoutMs)
+        ),
+      ]);
 
       let lastCandidates: any = null;
       for await (const chunk of streamResult) {
@@ -682,15 +729,15 @@ ${req.customInstructions ? `\nCustom Instructions: ${req.customInstructions}` : 
     }
   }
 
-  // Fallback to non-streaming / live solver if stream failed before first token
-  const fallback = await generateChatResponse(req);
-  if (fallback.text) {
-    onChunk(fallback.text);
+  // Fallback directly to live open solver without re-running Gemini loop
+  const fallbackText = await resolveIntelligentFallbackAnswer(req);
+  if (fallbackText) {
+    onChunk(fallbackText);
   }
   return {
-    fullText: fallback.text,
-    groundingSources: fallback.groundingSources || [],
-    isReasoning: fallback.isReasoning,
+    fullText: fallbackText,
+    groundingSources: [],
+    isReasoning: false,
   };
 }
 

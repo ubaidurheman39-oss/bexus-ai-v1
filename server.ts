@@ -34,7 +34,11 @@ const PORT = resolvePort();
 app.use(compression({
   threshold: 512,
   filter: (req, res) => {
-    if (req.headers['x-no-compression']) {
+    if (
+      req.headers['x-no-compression'] ||
+      req.path === '/api/chat/stream' ||
+      req.originalUrl.includes('/chat/stream')
+    ) {
       return false;
     }
     return compression.filter(req, res);

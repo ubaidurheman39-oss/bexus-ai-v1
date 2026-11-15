@@ -1333,19 +1333,24 @@ export default function App() {
                   const evt = JSON.parse(trimmed.slice(5).trim());
                   if (evt.type === 'chunk' && evt.text) {
                     accumulatedText += evt.text;
-                    if (!firstTokenRevealed) {
-                      firstTokenRevealed = true;
-                      setIsLoading(false);
-                    }
-                    setMessages([
-                      ...newMessages,
-                      {
-                        id: streamMsgId,
-                        role: 'assistant',
-                        content: accumulatedText,
-                        timestamp: Date.now(),
+                    const looksUnavailable =
+                      accumulatedText.includes("I couldn't reach the live AI reasoning server") ||
+                      accumulatedText.includes('live AI connection abhi busy hai');
+                    if (!looksUnavailable) {
+                      if (!firstTokenRevealed) {
+                        firstTokenRevealed = true;
+                        setIsLoading(false);
                       }
-                    ]);
+                      setMessages([
+                        ...newMessages,
+                        {
+                          id: streamMsgId,
+                          role: 'assistant',
+                          content: accumulatedText,
+                          timestamp: Date.now(),
+                        }
+                      ]);
+                    }
                   } else if (evt.type === 'done') {
                     if (evt.fullText && evt.fullText.length > accumulatedText.length) {
                       accumulatedText = evt.fullText;
@@ -1362,14 +1367,21 @@ export default function App() {
           usedStreaming = false;
         }
 
-        if (!usedStreaming || !data?.text) {
-          const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(chatPayload),
-          });
+        const isUnavailableStub = (txt?: string) =>
+          !txt || !txt.trim() || txt.includes("I couldn't reach the live AI reasoning server") || txt.includes('live AI connection abhi busy hai');
 
+        if ((!usedStreaming || isUnavailableStub(data?.text)) && Date.now() - startTime < 5500) {
           try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 8500);
+            const response = await fetch('/api/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(chatPayload),
+              signal: controller.signal,
+            });
+            clearTimeout(timer);
+
             const contentType = response.headers.get('content-type') || '';
             if (contentType.includes('application/json')) {
               data = await response.json();
@@ -1382,12 +1394,45 @@ export default function App() {
               }
             }
           } catch {
-            data = { text: '' };
+            // Proceed to browser-direct rescue
           }
+        }
 
-          if (!response.ok && !data?.text) {
-            throw new Error(data?.error || `Server returned ${response.status}`);
+        if (isUnavailableStub(data?.text)) {
+          try {
+            const targetLang = currentLang && currentLang.toLowerCase() !== 'english' ? currentLang : 'English';
+            const rescueCtrl = new AbortController();
+            const rescueTimer = setTimeout(() => rescueCtrl.abort(), 8500);
+            const rescueRes = await fetch('https://text.pollinations.ai/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: 'openai',
+                seed: Math.floor(Math.random() * 100000),
+                messages: [
+                  {
+                    role: 'system',
+                    content: `You are Bexus AI, a sharp, helpful problem-solving assistant. Reply strictly in clear, practical ${targetLang}. Solve the user's exact problem with concrete, helpful steps.`
+                  },
+                  ...newMessages.slice(-4).map(m => ({ role: m.role, content: m.content.slice(0, 800) }))
+                ]
+              }),
+              signal: rescueCtrl.signal,
+            });
+            clearTimeout(rescueTimer);
+            if (rescueRes.ok) {
+              const rescueText = (await rescueRes.text()).trim();
+              if (rescueText && !rescueText.startsWith('{') && rescueText.length > 15) {
+                data = { text: rescueText };
+              }
+            }
+          } catch {
+            // Continue gracefully
           }
+        }
+
+        if (isUnavailableStub(data?.text)) {
+          throw new Error('All live AI routes temporarily busy');
         }
 
         sounds.playReceive();
@@ -1447,13 +1492,34 @@ export default function App() {
       );
     } catch (err: any) {
       console.error('[Bexus Chat Network/Server Handler]:', err);
-      const query = (content || '').toLowerCase().trim();
-      const userName = currentUser?.name?.trim() || 'Ubaid';
-      const fallbackText = generateNaturalConversationalReply(content, {
+      const userName = currentUser?.name?.trim() || 'User';
+      let fallbackText = generateNaturalConversationalReply(content, {
         userName,
         lang: activeSpokenLanguage,
         voiceMode: false,
       });
+
+      if (fallbackText.includes("I couldn't reach the live AI reasoning server")) {
+        try {
+          const rescueRes = await fetch('https://text.pollinations.ai/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'openai',
+              messages: [
+                { role: 'system', content: 'You are Bexus AI. Solve the user problem clearly and concisely in English.' },
+                { role: 'user', content: content }
+              ]
+            })
+          });
+          if (rescueRes.ok) {
+            const txt = (await rescueRes.text()).trim();
+            if (txt && !txt.startsWith('{') && txt.length > 15) {
+              fallbackText = txt;
+            }
+          }
+        } catch {}
+      }
 
       const errorMessage: MessageItem = {
         id: 'msg_err_' + Date.now(),

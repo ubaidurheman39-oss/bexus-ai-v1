@@ -433,7 +433,27 @@ export const VoiceStudioModal: React.FC<VoiceStudioModalProps> = ({
       const data = await res.json();
       let replyText = data.text;
 
-      if (!replyText || replyText.includes('I understand your question about') || replyText.includes('I am listening.') || replyText.includes('How can I assist you further')) {
+      if (!replyText || replyText.includes('I understand your question about') || replyText.includes('I am listening.') || replyText.includes('How can I assist you further') || replyText.includes("I couldn't reach the live AI reasoning server")) {
+        const rescueRes = await fetch('https://text.pollinations.ai/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'openai',
+            messages: [
+              { role: 'system', content: 'You are Bexus AI Voice Assistant. Give a concise, clear, accurate English answer in 2-4 sentences.' },
+              { role: 'user', content: spokenQuery }
+            ]
+          })
+        });
+        if (rescueRes.ok) {
+          const txt = (await rescueRes.text()).trim();
+          if (txt && !txt.startsWith('{') && txt.length > 15) {
+            replyText = txt;
+          }
+        }
+      }
+
+      if (!replyText) {
         replyText = instantReply;
       }
 
@@ -445,12 +465,32 @@ export const VoiceStudioModal: React.FC<VoiceStudioModalProps> = ({
       // Speak reply aloud
       await playVoiceResponse(replyText);
     } catch (err) {
-      console.warn('Conversational voice error, using natural conversational engine:', err);
+      console.warn('Conversational voice error, attempting browser rescue:', err);
+      let rescued = instantReply;
+      if (rescued.includes("I couldn't reach the live AI reasoning server")) {
+        try {
+          const r = await fetch('https://text.pollinations.ai/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'openai',
+              messages: [
+                { role: 'system', content: 'You are Bexus AI Voice Assistant. Give a concise, clear, accurate English answer.' },
+                { role: 'user', content: spokenQuery }
+              ]
+            })
+          });
+          if (r.ok) {
+            const txt = (await r.text()).trim();
+            if (txt && !txt.startsWith('{') && txt.length > 15) rescued = txt;
+          }
+        } catch {}
+      }
       setDialogue(prev => [
         ...prev,
-        { role: 'assistant', text: instantReply, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+        { role: 'assistant', text: rescued, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
       ]);
-      await playVoiceResponse(instantReply);
+      await playVoiceResponse(rescued);
     }
   };
 
