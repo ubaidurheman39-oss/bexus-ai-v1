@@ -3100,7 +3100,7 @@ function generateAiNeuralWorkspaceHtml(appTitle) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: [{ role: 'user', content: userPrompt }],
-            modelId: 'gemini-3.8-flash'
+            modelId: 'gemini-4-hydrogen'
           }),
           signal: controller.signal
         });
@@ -5106,140 +5106,71 @@ function getClientDirectImageUrl(prompt, width = 1280) {
 function cleanQuery(input) {
   return (input || "").trim().replace(/[?!.,;:]+$/g, "").toLowerCase().replace(/\bhoy\b/g, "how").replace(/\bhw\b/g, "how").replace(/\br\b/g, "are").replace(/\bu\b/g, "you").replace(/\bur\b/g, "your").replace(/\bkesy\b/g, "kese").replace(/\bkaise\b/g, "kese").replace(/\bhaal\b/g, "hal").replace(/\bha\b/g, "hai").trim();
 }
-function generateNaturalConversationalReply(rawQuery, options) {
+function tryEvaluateMathExpression(query) {
+  const pct = query.match(/^([0-9.]+)\s*%\s*(?:of)?\s*([0-9.]+)$/);
+  if (pct) {
+    return parseFloat(pct[1]) / 100 * parseFloat(pct[2]);
+  }
+  const normalized = query.replace(/^(what is|calculate|solve|eval|evaluate)\s+/i, "").replace(/\bplus\b/gi, "+").replace(/\bminus\b/gi, "-").replace(/\btimes\b|\bmultiplied by\b|\binto\b/gi, "*").replace(/\bdivided by\b/gi, "/").replace(/×/g, "*").replace(/÷/g, "/").trim();
+  if (!/^[0-9+\-*/().\s]+$/.test(normalized)) return null;
+  if (!/[0-9]/.test(normalized) || !/[+\-*/]/.test(normalized)) return null;
+  try {
+    const val = Function(`"use strict"; return (${normalized});`)();
+    if (typeof val === "number" && Number.isFinite(val)) {
+      return Math.round(val * 1e5) / 1e5;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+function tryInstantDirectReply(rawQuery, options) {
   const query = cleanQuery(rawQuery);
-  const original = (rawQuery || "").trim();
+  if (!query) return null;
   const normalizedLang = (options?.lang || "").toLowerCase();
   const isUrdu = normalizedLang === "ur" || normalizedLang === "ur-roman" || normalizedLang === "urdu";
-  const percentMatch = query.match(/([0-9.]+)\s*%\s*(of)?\s*([0-9.]+)/);
-  if (percentMatch) {
-    const pct = parseFloat(percentMatch[1]);
-    const total = parseFloat(percentMatch[3]);
-    const ans = pct / 100 * total;
-    return isUrdu ? `${total} ka ${pct}% banta hai ${ans}.` : `${pct}% of ${total} is ${ans}.`;
+  const mathAns = tryEvaluateMathExpression(query);
+  if (mathAns !== null) {
+    return isUrdu ? `Jawab hai: ${mathAns}` : `The answer is ${mathAns}.`;
   }
-  const mathMatch = query.match(/^([0-9.]+)\s*([\+\-\*\/xX]|plus|minus|times|divided by|into)\s*([0-9.]+)$/);
-  if (mathMatch) {
-    const a = parseFloat(mathMatch[1]);
-    const op = mathMatch[2];
-    const b = parseFloat(mathMatch[3]);
-    let ans = 0;
-    if (op === "+" || op === "plus") ans = a + b;
-    else if (op === "-" || op === "minus") ans = a - b;
-    else if (op === "*" || op === "x" || op === "X" || op === "times" || op === "into") ans = a * b;
-    else if (op === "/" || op === "divided by") ans = b !== 0 ? a / b : NaN;
-    if (!isNaN(ans)) {
-      return isUrdu ? `Jawab hai: ${ans}` : `The answer is ${ans}.`;
-    }
+  if (/^(how are you|how are u|how are you doing|how is it going|how do you do|whats up|what's up|wassup)$/i.test(query)) {
+    return isUrdu ? "Main bilkul theek aur zabardast hoon! Aap sunayein, kya haal chaal hain?" : "I'm doing great, thank you! Ask me any question or describe any problem and I'll help solve it right away.";
   }
-  if (query === "how are you" || query === "how are u" || query.startsWith("how are you") || query.startsWith("how r you") || query.includes("how are you doing") || query.includes("how is it going") || query === "what's up" || query === "whats up" || query === "wassup") {
-    return isUrdu ? "Main bilkul theek aur zabardast hoon! Aap sunayein, kya haal chaal hain?" : "I'm doing great, thank you! How are you doing today?";
+  if (/^(kese ho|kya hal|kya hal hai|sab theek|sab theek hai|kya chal raha hai)$/i.test(query)) {
+    return isUrdu ? "Main bilkul theek aur fresh hoon! Aap batayein, kis cheez me madad chahiye?" : "I'm doing great, thank you! What question or problem can I help you solve today?";
   }
-  if (query.includes("kese ho") || query.includes("kya hal") || query.includes("sab theek") || query.includes("kya chal raha")) {
-    return isUrdu ? "Main bilkul theek aur fresh hoon! Aap batayein, sab khairiat hai?" : "I'm doing great, thank you! How can I help you today?";
+  if (/^(hello|hi|hey|hola|hello bexus|hi bexus|hey bexus)$/i.test(query)) {
+    return isUrdu ? "Hello! Main Bexus AI hoon. Batayein aaj kis cheez me madad chahiye?" : "Hello! I am Bexus AI. Ask me anything\u2014from coding and troubleshooting to science, writing, or daily problems.";
   }
-  if (/^(hello|hi|hey|hola)$/i.test(query)) {
-    return isUrdu ? "Hello! Main Bexus AI hoon. Batayein aaj kis cheez me madad chahiye?" : "Hello! I am Bexus AI. What would you like to explore or work on today?";
-  }
-  if (/^(salam|assalam|assalam o alaikum|aoa)$/i.test(query)) {
-    return isUrdu ? "Walaikum Assalam! Bexus AI hazir hai, batayein aaj kya discuss ya create karein?" : "Hello! Bexus AI is here and ready. What would you like to discuss or build today?";
-  }
-  if (query.includes("who are you") || query.includes("what are you") || query.includes("tum kon ho") || query.includes("aap kon") || query.includes("who made you") || query.includes("kis ne banaya")) {
-    return isUrdu ? "Main Bexus AI hoon \u2014 aapka smart AI assistant jo sawalaat ke jawab deta hai, 8K realistic images generate karta hai, songs banata hai aur coding karta hai." : "I am Bexus AI, an intelligent AI assistant built to answer questions, generate 8K photorealistic imagery, compose original music, and write clean code.";
-  }
-  if (query.includes("what can you do") || query.includes("kya kar sakte") || query.includes("features") || query.includes("tum kya karte")) {
-    return isUrdu ? "Main aam sawalaat ke foran jawab de sakta hoon, 8K ultra HD images generate karta hoon, original songs compose karta hoon aur software coding me madad karta hoon." : "I can answer questions across science, history, tech, and everyday life, generate 8K images in Image Studio, compose songs in Music Studio, and write software code.";
-  }
-  if (query.includes("time") || query.includes("waqt")) {
-    const timeStr = (/* @__PURE__ */ new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    return isUrdu ? `Is waqt time ${timeStr} hai.` : `It is currently ${timeStr}.`;
-  }
-  if (query.includes("date") || query.includes("tarikh") || query.includes("today") || query.includes("aaj")) {
-    const dateStr = (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
-    return isUrdu ? `Aaj ki date ${dateStr} hai.` : `Today is ${dateStr}.`;
-  }
-  if (query.includes("faisalabad")) {
-    return isUrdu ? 'Faisalabad Pakistan ke sooba Punjab ka teesra bara shehar hai. Iska purana naam Lyallpur tha aur yeh apni azeem textile industry ki wajah se "Manchester of Pakistan" kehlata hai.' : 'Faisalabad is Pakistan\u2019s third-most populous city, situated in central Punjab. Historically known as Lyallpur, it is famously known as the "Manchester of Pakistan" due to its dominant textile manufacturing and international exports.';
-  }
-  if (query.includes("lahore")) {
-    return isUrdu ? "Lahore Punjab ka darul-hukumat aur Pakistan ka saqafati markaz hai, jo Badshahi Masjid, Shahi Qila, aur laziz khanon ke liye dunya bhar me mashhoor hai." : "Lahore is the historic capital of Punjab and Pakistan\u2019s cultural heart, renowned worldwide for UNESCO heritage sites like Badshahi Mosque and Lahore Fort, vibrant food streets, and rich literary tradition.";
-  }
-  if (query.includes("karachi")) {
-    return isUrdu ? 'Karachi Pakistan ka sab se bara shehar aur maashi markaz hai jo Bahr-e-Arab ke sahil par waqay hai aur "Roshniyon Ka Shehar" kehlata hai.' : 'Karachi is Pakistan\u2019s largest metropolis and economic hub, located along the Arabian Sea. It houses the nation\u2019s primary deep-water seaports and is affectionately termed the "City of Lights".';
-  }
-  if (query.includes("islamabad")) {
-    return isUrdu ? "Islamabad Pakistan ka federal darul-hukumat hai jo Margalla pahariyon ke daman me waqay hai, jo apni khubsurti, Faisal Masjid aur sabz-o-shadab mahol ke liye jana jata hai." : "Islamabad is the federal capital of Pakistan, nestled at the foothills of the scenic Margalla Hills. Planned in the 1960s, it is noted for high living standards, lush green sectors, and the iconic Faisal Mosque.";
-  }
-  if (query.includes("pakistan")) {
-    return isUrdu ? "Pakistan Junoobi Asia ka ahem mulk hai jo 14 August 1947 ko Quaid-e-Azam Muhammad Ali Jinnah ki qiyadat me wujood me aaya. Iska darul-hukumat Islamabad hai aur qaumi zaban Urdu hai." : "Pakistan is a South Asian nation founded on August 14, 1947, by Quaid-e-Azam Muhammad Ali Jinnah. Bordering China, India, Afghanistan, and Iran, its capital is Islamabad and its currency is the Pakistani Rupee (PKR).";
-  }
-  if (query.includes("capital of") || query.includes("darul hukumat") || query.includes("dar-ul-hukumat")) {
-    if (query.includes("pakistan")) return isUrdu ? "Pakistan ka darul-hukumat Islamabad hai." : "The capital of Pakistan is Islamabad.";
-    if (query.includes("india")) return isUrdu ? "India ka darul-hukumat New Delhi hai." : "The capital of India is New Delhi.";
-    if (query.includes("usa") || query.includes("america") || query.includes("united states")) return isUrdu ? "America ka darul-hukumat Washington, D.C. hai." : "The capital of the United States is Washington, D.C.";
-    if (query.includes("uk") || query.includes("england") || query.includes("britain")) return isUrdu ? "UK ka darul-hukumat London hai." : "The capital of the United Kingdom is London.";
-    if (query.includes("saudi") || query.includes("arabia")) return isUrdu ? "Saudi Arabia ka darul-hukumat Riyadh hai." : "The capital of Saudi Arabia is Riyadh.";
-    if (query.includes("uae") || query.includes("emirates") || query.includes("dubai")) return isUrdu ? "UAE ka darul-hukumat Abu Dhabi hai (jabke Dubai sab se bara shehar hai)." : "The capital of the UAE is Abu Dhabi, while Dubai is its largest commercial city.";
-    if (query.includes("turkey") || query.includes("turkiye")) return isUrdu ? "Turkiye ka darul-hukumat Ankara hai." : "The capital of Turkey (T\xFCrkiye) is Ankara.";
-    if (query.includes("china")) return isUrdu ? "China ka darul-hukumat Beijing hai." : "The capital of China is Beijing.";
-    if (query.includes("japan")) return isUrdu ? "Japan ka darul-hukumat Tokyo hai." : "The capital of Japan is Tokyo.";
-    if (query.includes("france")) return isUrdu ? "France ka darul-hukumat Paris hai." : "The capital of France is Paris.";
-    if (query.includes("germany")) return isUrdu ? "Germany ka darul-hukumat Berlin hai." : "The capital of Germany is Berlin.";
-    if (query.includes("canada")) return isUrdu ? "Canada ka darul-hukumat Ottawa hai." : "The capital of Canada is Ottawa.";
-    if (query.includes("australia")) return isUrdu ? "Australia ka darul-hukumat Canberra hai." : "The capital of Australia is Canberra.";
-  }
-  if (query.includes("quaid") || query.includes("jinnah")) {
-    return isUrdu ? "Quaid-e-Azam Muhammad Ali Jinnah (1876\u20131948) Pakistan ke bani aur pehle Governor-General the. Unki azeem qiyadat aur jaddojahad se musalmanon ke liye aik azaad watan wujood me aaya." : "Quaid-e-Azam Muhammad Ali Jinnah (1876\u20131948) was the founding father and first Governor-General of Pakistan, revered for his constitutional brilliance and leadership in establishing an independent sovereign state.";
-  }
-  if (query.includes("iqbal") || query.includes("allama")) {
-    return isUrdu ? "Allama Muhammad Iqbal (1877\u20131938) Pakistan ke qaumi shair, azeem mufakkir aur falsafi the, jinho ne apne falsafa-e-Khudi se musalmanon ko bedar kiya." : "Allama Muhammad Iqbal (1877\u20131938) was the national poet-philosopher of Pakistan whose vision, intellect, and timeless Urdu and Persian poetry inspired self-realization and the ideological foundation of Pakistan.";
-  }
-  if (query.includes("einstein")) {
-    return isUrdu ? "Albert Einstein aik azeem theoretical physicist the jinho ne Theory of Relativity daryaft ki aur unko 1921 me Physics ka Nobel Prize mila." : "Albert Einstein was a groundbreaking theoretical physicist who developed the theory of relativity, fundamentally altering our understanding of gravity, space, and time, and was awarded the 1921 Nobel Prize in Physics.";
-  }
-  if (query.includes("elon musk")) {
-    return isUrdu ? "Elon Musk aik azeem entrepreneur hain jo Tesla (electric cars), SpaceX (reusable rockets), Neuralink, aur xAI ke sarbarah hain." : "Elon Musk is the billionaire technology entrepreneur serving as CEO of Tesla, founder of SpaceX, Neuralink, and xAI, pioneering commercial spaceflight and electric transport.";
-  }
-  if (query.includes("photosynthesis")) {
-    return isUrdu ? "Photosynthesis woh amal hai jisme paudhe suraj ki roshni, paani aur carbon dioxide ka istemaal karke khorak (glucose) banate hain aur oxygen kharij karte hain." : "Photosynthesis is the biological process used by green plants and algae to convert light energy from the sun, water, and carbon dioxide into chemical energy (glucose) while releasing oxygen into the air.";
-  }
-  if (query.includes("black hole") || query.includes("blackhole")) {
-    return isUrdu ? "Black hole kainaat me aisi jagah hai jahan gravity itni shadeed hoti hai ke roshni bhi wahan se wapas nahi nikal sakti." : "A black hole is an astronomical region of spacetime where gravitational acceleration is so intense that nothing\u2014not even light or electromagnetic radiation\u2014can escape beyond its event horizon.";
-  }
-  if (query.includes("planet") || query.includes("solar system") || query.includes("sayyaray")) {
-    return isUrdu ? "Hamare nizam-e-shamsi (solar system) me 8 sayyaray hain: Mercury, Venus, Earth (Zameen), Mars, Jupiter, Saturn, Uranus, aur Neptune." : "Our solar system consists of the Sun and 8 primary planets in order of distance: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune.";
-  }
-  if (query.includes("chai") || query.includes("tea")) {
-    return isUrdu ? "Karak chai ka aasan tareeqa: 1 cup paani ubaal kar 2 chamach patti aur 2 elaichi daalein. 2 minute pakayein, phir 1 cup doodh aur cheeni shamil karein. 3 se 4 josh aane par chaan kar garam garam pesh karein!" : "How to make authentic Karak Chai: Boil 1 cup water with 2 tsp strong black tea leaves and crushed cardamom. Simmer for 2 minutes, add 1 cup whole milk and sugar, boil until rich golden brown, strain, and serve steaming hot!";
-  }
-  if (query.includes("biryani")) {
-    return isUrdu ? "Laziz Sindhi biryani ke liye chicken/mutton ka masala dahi, tamatar, aalu aur biryani masale ke sath bhun lein. Basmati chawal 70% ubaal kar korma ke upar teh (layers) lagayein, zarda rang aur dhanya/pudina daal kar 15 minute dam dein!" : "Authentic Biryani recipe: Sear marinated meat with yogurt, tomatoes, and aromatic whole spices until tender. Parboil basmati rice with whole spices, layer the rice over the spiced curry, drizzle saffron milk, and steam tightly (Dum) for 15 minutes.";
-  }
-  if (query.includes("learn coding") || query.includes("coding kaise") || query.includes("programming")) {
-    return isUrdu ? "Coding seekhne ka behtareen tareeqa: 1. Python ya JavaScript se aaghaz karein. 2. Rozana 1 ghanta practice karein. 3. Variables, loops, aur functions seekhein. 4. Chhotay chhotay real projects banayein!" : "The fastest way to learn coding: 1. Start with Python or JavaScript. 2. Master core building blocks (variables, loops, functions, arrays). 3. Build small practical projects daily. 4. Use free resources like MDN, freeCodeCamp, and W3Schools.";
-  }
-  if (query.includes("health") || query.includes("fit") || query.includes("wazan")) {
-    return isUrdu ? "Sehatmand rehne ke 4 bunyadi usool: 1. Rozana 8 glass paani piyein. 2. 7 se 8 ghantay pur-sukoon neend lein. 3. Rozana 30 minute paidal chalein ya warzish karein. 4. Meethi aur tali hui cheezon se parhez karein." : "Core health fundamentals: 1. Hydrate with 2\u20133 liters of water daily. 2. Get 7\u20138 hours of quality sleep. 3. Walk or exercise for 30 minutes every day. 4. Prioritize whole protein, vegetables, and minimize refined sugars.";
+  if (/^(salam|assalam|assalam o alaikum|assalamualaikum|aoa)$/i.test(query)) {
+    return isUrdu ? "Walaikum Assalam! Bexus AI hazir hai, batayein aaj kya discuss ya solve karein?" : "Hello! Bexus AI is ready. What question or problem can I help you with today?";
   }
   if (/^(thank you|thanks|thank u|shukriya|bohat shukriya|dhanyawad)$/i.test(query)) {
     return isUrdu ? "Bohat shukriya! Mujhe aapki madad karke hamesha khushi hoti hai." : "You're very welcome! Happy to help anytime.";
   }
   if (/^(ok|okay|theek hai|thek ha|good|great|nice|cool|zabardast|sahi|achha|acha)$/i.test(query)) {
-    return isUrdu ? "Theek hai! Aage batayein kya karna hai?" : "Understood! What would you like to explore next?";
+    return isUrdu ? "Theek hai! Aage batayein kya karna hai?" : "Got it! What would you like me to help you with next?";
   }
-  if (query.includes("joke") || query.includes("lateefa")) {
-    return isUrdu ? 'Ustaad ne bache se poocha: "Tumhare hisaab me 0 number kyun aaye?" Bacha bola: "Sir paper par sawal tha ke 5 me se 5 gaye to kya bacha? Maine socha kuch nahi bacha to kuch likha hi nahi!"' : "Why do programmers always prefer dark mode? Because light attracts bugs!";
+  if (/^(what is the time|what time is it|current time|time please|time|waqt|kya time hai)$/i.test(query)) {
+    const timeStr = (/* @__PURE__ */ new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return isUrdu ? `Is waqt time ${timeStr} hai.` : `It is currently ${timeStr}.`;
   }
+  if (/^(what is the date|what is todays date|what is today's date|todays date|today's date|date today|date|aaj ki date|aaj ki tarikh)$/i.test(query)) {
+    const dateStr = (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+    return isUrdu ? `Aaj ki date ${dateStr} hai.` : `Today is ${dateStr}.`;
+  }
+  return null;
+}
+function generateNaturalConversationalReply(rawQuery, options) {
+  const direct = tryInstantDirectReply(rawQuery, options);
+  if (direct) return direct;
+  const original = (rawQuery || "").trim();
+  const normalizedLang = (options?.lang || "").toLowerCase();
+  const isUrdu = normalizedLang === "ur" || normalizedLang === "ur-roman" || normalizedLang === "urdu";
   if (isUrdu) {
-    if (query.startsWith("kya") || query.startsWith("kaise") || query.startsWith("kahan") || query.startsWith("kyun") || query.includes("batao")) {
-      return `Aapke sawal "${original}" ke hawale se ahem maloomat: Yeh aik ahem mauzu hai. Iska bunyadi maqsad aur hal yeh hai ke ispar ba-qaida amal kiya jaye aur zaroori steps uthaye jayein. Agar aap iski mazeed tafseelat chahte hain to main point-by-point samjha deta hoon!`;
-    }
-    return `Bilkul! "${original}" ke mutalliq meri analysis yeh hai ke yeh kaafi dilchasp aur ahem nukta hai. Isme mazeed kya specific maloomat darkaar hain?`;
+    return `Sorry, "${original}" par live AI connection abhi busy hai. Thori der mein dobara try karein ya sawal thora clear likhein.`;
   }
-  if (query.startsWith("what") || query.startsWith("how") || query.startsWith("who") || query.startsWith("where") || query.startsWith("why") || query.startsWith("can you") || query.startsWith("tell me")) {
-    return `Regarding "${original}": The core principle is focused on precision and effective execution. Depending on your goal, you can approach this step-by-step with verified data and practical implementation. Let me know what specific detail you'd like to dive into!`;
-  }
-  return `Regarding "${original}": That is an interesting and important topic. Let me know what specific aspect you want to focus on or solve!`;
+  return `I couldn't reach the live AI reasoning server just now for "${original}". Please try sending your question again in a moment.`;
 }
 
 // src/server/geminiService.ts
@@ -5264,9 +5195,131 @@ function getAIClient() {
       }
     });
   }
-  return new GoogleGenAI();
+  return new GoogleGenAI({
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build"
+      }
+    }
+  });
 }
 var ai = getAIClient();
+async function fetchInstantWebKnowledge(query) {
+  const cleanQ = (query || "").replace(/^(what is|who is|where is|explain|tell me about|define|how does|why does|describe)\s+/i, "").replace(/[?!.]+$/g, "").trim();
+  if (!cleanQ || cleanQ.length < 2) return null;
+  try {
+    const [ddgRes, wikiSearchRes] = await Promise.allSettled([
+      fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(cleanQ)}&format=json&no_html=1&skip_disambig=1`, {
+        signal: AbortSignal.timeout(2200)
+      }).then((r) => r.ok ? r.json() : null),
+      fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanQ)}&srlimit=1&format=json&origin=*`, {
+        signal: AbortSignal.timeout(2200)
+      }).then((r) => r.ok ? r.json() : null)
+    ]);
+    if (ddgRes.status === "fulfilled" && ddgRes.value) {
+      const ddg = ddgRes.value;
+      const abstractText = (ddg.AbstractText || ddg.Answer || "").trim();
+      if (abstractText.length > 40) {
+        return abstractText;
+      }
+    }
+    if (wikiSearchRes.status === "fulfilled" && wikiSearchRes.value?.query?.search?.[0]?.title) {
+      const topTitle = wikiSearchRes.value.query.search[0].title;
+      const sumRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topTitle)}`, {
+        signal: AbortSignal.timeout(2200)
+      });
+      if (sumRes.ok) {
+        const sumData = await sumRes.json();
+        const extract = (sumData?.extract || "").trim();
+        if (extract.length > 40 && sumData?.type !== "disambiguation") {
+          return extract;
+        }
+      }
+    }
+  } catch {
+  }
+  return null;
+}
+async function runAiHordeTextSolver(messages, preferredLanguage) {
+  try {
+    const targetLang = preferredLanguage && preferredLanguage.toLowerCase() !== "english" ? preferredLanguage : "English";
+    const historyBlock = messages.slice(-4).map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content.slice(0, 600)}`).join("\n");
+    const prompt = `System: You are Bexus AI, an expert problem-solver and helpful assistant. Give an accurate, clear, step-by-step, practical answer strictly in ${targetLang}. Be concise, direct, and solve the exact user problem without filler.
+${historyBlock}
+Assistant:`;
+    const submitRes = await fetch("https://aihorde.net/api/v2/generate/text/async", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: "0000000000",
+        "Client-Agent": "BexusAI:2.0:bexus"
+      },
+      body: JSON.stringify({
+        prompt,
+        params: {
+          max_context_length: 1024,
+          max_length: 260,
+          temperature: 0.35,
+          stop_sequence: ["\nUser:", "User:", "System:"]
+        }
+      }),
+      signal: AbortSignal.timeout(4e3)
+    });
+    if (!submitRes.ok) return null;
+    const submitData = await submitRes.json();
+    const jobId = submitData?.id;
+    if (!jobId) return null;
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < 10500) {
+      await new Promise((resolve) => setTimeout(resolve, 750));
+      const pollRes = await fetch(`https://aihorde.net/api/v2/generate/text/status/${jobId}`, {
+        signal: AbortSignal.timeout(2500)
+      });
+      if (!pollRes.ok) continue;
+      const pollData = await pollRes.json();
+      if (pollData?.done && pollData?.generations?.[0]?.text) {
+        const raw = String(pollData.generations[0].text).trim();
+        const cleaned = raw.replace(/^(Assistant:|Bexus AI:)\s*/i, "").replace(/\nUser:[\s\S]*$/i, "").trim();
+        if (cleaned.length >= 20) {
+          return cleaned;
+        }
+        return null;
+      }
+      if (pollData?.faulted || pollData?.wait_time && pollData.wait_time > 25) {
+        return null;
+      }
+    }
+  } catch {
+  }
+  return null;
+}
+async function resolveIntelligentFallbackAnswer(req) {
+  const lastUserQuery = req.messages[req.messages.length - 1]?.content?.trim() || "";
+  const direct = tryInstantDirectReply(lastUserQuery, {
+    userName: req.userName,
+    lang: req.preferredLanguage,
+    voiceMode: false
+  });
+  if (direct) return direct;
+  const [hordeRes, webRes] = await Promise.allSettled([
+    runAiHordeTextSolver(
+      req.messages.map((m) => ({ role: m.role, content: m.content })),
+      req.preferredLanguage
+    ),
+    fetchInstantWebKnowledge(lastUserQuery)
+  ]);
+  if (hordeRes.status === "fulfilled" && hordeRes.value) {
+    return hordeRes.value;
+  }
+  if (webRes.status === "fulfilled" && webRes.value) {
+    return webRes.value;
+  }
+  return generateNaturalConversationalReply(lastUserQuery, {
+    userName: req.userName,
+    lang: req.preferredLanguage,
+    voiceMode: false
+  });
+}
 var exhaustedModels = /* @__PURE__ */ new Map();
 function isTransientModelError(err) {
   const msg = (err?.message || String(err)).toLowerCase();
@@ -5432,26 +5485,33 @@ ${att.extractedText}
       parts: [{ text: "Hello" }]
     });
   }
-  const config = {
+  const lastUserQuery = req.messages[req.messages.length - 1]?.content?.trim() || "";
+  const wantsFreshWebInfo = req.enableSearch || isDeepResearch || /\b(latest|today|current|news|price|weather|score|winner|2025|2026|right now|live)\b/i.test(lastUserQuery);
+  const baseConfig = {
     systemInstruction
   };
-  if (isReasoning) {
-    config.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
+  if (wantsFreshWebInfo) {
+    baseConfig.tools = [{ googleSearch: {} }];
   }
-  if (req.enableSearch || isDeepResearch) {
-    config.tools = [{ googleSearch: {} }];
-  }
-  const baseModels = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"];
+  const baseModels = ["gemini-4-hydrogen", "gemini-3.1-flash-lite"];
   const modelsToTry = getPrioritizedModels(baseModels);
-  if (!process.env.GEMINI_API_KEY) {
-    const lastUserQuery2 = req.messages[req.messages.length - 1]?.content?.trim() || "";
-    const naturalReply2 = generateNaturalConversationalReply(lastUserQuery2, {
-      userName: req.userName,
-      lang: req.preferredLanguage,
-      voiceMode: false
-    });
+  const activeClient = getAIClient();
+  const instantReply = tryInstantDirectReply(lastUserQuery, {
+    userName: req.userName,
+    lang: req.preferredLanguage,
+    voiceMode: false
+  });
+  if (instantReply && !req.messages.some((m) => m.attachments && m.attachments.length > 0)) {
     return {
-      text: naturalReply2,
+      text: instantReply,
+      groundingSources: [],
+      isReasoning: false
+    };
+  }
+  if (!process.env.GEMINI_API_KEY) {
+    const fallbackAnswer2 = await resolveIntelligentFallbackAnswer(req);
+    return {
+      text: fallbackAnswer2,
       groundingSources: [],
       isReasoning: false
     };
@@ -5459,15 +5519,21 @@ ${att.extractedText}
   let lastError = null;
   for (const model of modelsToTry) {
     try {
-      const modelConfig = { ...config };
-      if (isReasoning) {
-        modelConfig.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
+      const modelConfig = { ...baseConfig };
+      if (model === "gemini-4-hydrogen") {
+        modelConfig.thinkingConfig = {
+          thinkingLevel: isReasoning ? ThinkingLevel.HIGH : ThinkingLevel.LOW
+        };
+      } else if (model === "gemini-3.1-flash-lite") {
+        modelConfig.thinkingConfig = {
+          thinkingLevel: ThinkingLevel.MINIMAL
+        };
       }
-      const timeoutMs = isReasoning || req.enableSearch || isDeepResearch ? 2e4 : 4500;
+      const timeoutMs = isReasoning || wantsFreshWebInfo ? 2e4 : 12e3;
       let response;
       try {
         response = await Promise.race([
-          ai.models.generateContent({
+          activeClient.models.generateContent({
             model,
             contents,
             config: modelConfig
@@ -5481,7 +5547,7 @@ ${att.extractedText}
           delete modelConfig.tools;
           delete modelConfig.thinkingConfig;
           response = await Promise.race([
-            ai.models.generateContent({
+            activeClient.models.generateContent({
               model,
               contents,
               config: modelConfig
@@ -5520,7 +5586,7 @@ ${att.extractedText}
     } catch (modelErr) {
       lastError = modelErr;
       const errMsg = String(modelErr?.message || modelErr);
-      const isAuthError = errMsg.includes("PERMISSION_DENIED") || errMsg.includes("API key") || errMsg.includes("insufficient authentication scopes");
+      const isAuthError = errMsg.includes("PERMISSION_DENIED") || errMsg.includes("API key") || errMsg.includes("API_KEY_INVALID") || errMsg.includes("insufficient authentication scopes");
       markModelExhausted(model, isTransientModelError(modelErr) ? 18e4 : 6e4);
       if (isAuthError) {
         break;
@@ -5529,16 +5595,122 @@ ${att.extractedText}
       continue;
     }
   }
+  console.warn("[Bexus Chat] Gemini unavailable, using live intelligent solver fallback:", lastError?.message || lastError);
+  const fallbackAnswer = await resolveIntelligentFallbackAnswer(req);
+  return {
+    text: fallbackAnswer,
+    groundingSources: [],
+    isReasoning: false
+  };
+}
+async function generateChatResponseStream(req, onChunk) {
   const lastUserQuery = req.messages[req.messages.length - 1]?.content?.trim() || "";
-  const naturalReply = generateNaturalConversationalReply(lastUserQuery, {
+  const instantReply = tryInstantDirectReply(lastUserQuery, {
     userName: req.userName,
     lang: req.preferredLanguage,
     voiceMode: false
   });
+  if (instantReply && !req.messages.some((m) => m.attachments && m.attachments.length > 0)) {
+    onChunk(instantReply);
+    return { fullText: instantReply, groundingSources: [], isReasoning: false };
+  }
+  if (!process.env.GEMINI_API_KEY) {
+    const fallbackText = await resolveIntelligentFallbackAnswer(req);
+    onChunk(fallbackText);
+    return { fullText: fallbackText, groundingSources: [], isReasoning: false };
+  }
+  const isReasoning = req.modelId === "bexus-reasoning-pro" || !!req.enableReasoning;
+  const activeClient = getAIClient();
+  const targetLang = req.preferredLanguage && req.preferredLanguage.toLowerCase() !== "english" ? req.preferredLanguage : "English";
+  const systemInstruction = `You are Bexus AI, a sharp, deeply intelligent, empathetic, and helpful AI assistant powered by Gemini.
+- Communicate naturally like a world-class senior engineer and thoughtful partner.
+- By default reply strictly in clear, natural ${targetLang} (even if the user writes in Roman Urdu/Hindi, understand 100% accurately and respond in crisp ${targetLang} unless they explicitly request another language).
+- Solve ANY problem completely, accurately, and practically with clear steps, code blocks (single runnable HTML/JS block if building a web UI), or thorough explanations.
+- Never deflect with questionnaires when the user asks you to fix or build something.
+${req.customInstructions ? `
+Custom Instructions: ${req.customInstructions}` : ""}`;
+  const recentMessages = req.messages.length > 20 ? req.messages.slice(-20) : req.messages;
+  const contents = [];
+  for (const msg of recentMessages) {
+    const parts = [];
+    if (msg.attachments && msg.attachments.length > 0) {
+      for (const att of msg.attachments) {
+        if (att.dataBase64 && att.mimeType.startsWith("image/")) {
+          const rawBase64 = att.dataBase64.includes("base64,") ? att.dataBase64.split("base64,")[1] : att.dataBase64;
+          parts.push({ inlineData: { mimeType: att.mimeType, data: rawBase64 } });
+        } else if (att.extractedText) {
+          parts.push({ text: `[Attached Document: ${att.mimeType} Content]:
+${att.extractedText}
+---` });
+        }
+      }
+    }
+    if (msg.content) parts.push({ text: msg.content });
+    if (parts.length > 0) {
+      contents.push({ role: msg.role === "assistant" ? "model" : "user", parts });
+    }
+  }
+  if (contents.length === 0) {
+    contents.push({ role: "user", parts: [{ text: "Hello" }] });
+  }
+  const wantsFreshWebInfo = req.enableSearch || req.enableDeepResearch || /\b(latest|today|current|news|price|weather|score|winner|2025|2026|right now|live)\b/i.test(lastUserQuery);
+  const modelsToTry = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
+  for (const model of modelsToTry) {
+    let streamedText = "";
+    try {
+      const modelConfig = {
+        systemInstruction,
+        thinkingConfig: {
+          thinkingLevel: model === "gemini-4-hydrogen" ? isReasoning ? ThinkingLevel.HIGH : ThinkingLevel.LOW : ThinkingLevel.MINIMAL
+        }
+      };
+      if (wantsFreshWebInfo) {
+        modelConfig.tools = [{ googleSearch: {} }];
+      }
+      const streamResult = await activeClient.models.generateContentStream({
+        model,
+        contents,
+        config: modelConfig
+      });
+      let lastCandidates = null;
+      for await (const chunk of streamResult) {
+        const piece = chunk.text || "";
+        if (piece) {
+          streamedText += piece;
+          onChunk(piece);
+        }
+        if (chunk?.candidates) {
+          lastCandidates = chunk.candidates;
+        }
+      }
+      if (streamedText.trim()) {
+        const groundingChunks = lastCandidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        const groundingSources = groundingChunks.filter((c) => c?.web?.uri).map((c) => ({
+          title: c.web.title || c.web.uri,
+          url: c.web.uri,
+          domain: new URL(c.web.uri).hostname.replace("www.", "")
+        }));
+        return { fullText: streamedText, groundingSources, isReasoning };
+      }
+    } catch (err) {
+      const errMsg = String(err?.message || err);
+      markModelExhausted(model, isTransientModelError(err) ? 18e4 : 6e4);
+      if (streamedText.trim()) {
+        return { fullText: streamedText, groundingSources: [], isReasoning };
+      }
+      if (errMsg.includes("PERMISSION_DENIED") || errMsg.includes("API key") || errMsg.includes("API_KEY_INVALID")) {
+        break;
+      }
+    }
+  }
+  const fallback = await generateChatResponse(req);
+  if (fallback.text) {
+    onChunk(fallback.text);
+  }
   return {
-    text: naturalReply,
-    groundingSources: [],
-    isReasoning: false
+    fullText: fallback.text,
+    groundingSources: fallback.groundingSources || [],
+    isReasoning: fallback.isReasoning
   };
 }
 function sanitizeAndCleanPrompt(rawPrompt) {
@@ -5616,7 +5788,7 @@ National Geographic documentary photography, sharp focus on eyes, individual fur
     subjectDirective = `ARCHITECTURE/SCIFI DIRECTIVE:
 Grand cinematic perspective, atmospheric fog and volumetric lighting, intricate structural textures, pristine reflections.`;
   }
-  const models = getPrioritizedModels(["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"]);
+  const models = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
   const aiPrompt = `You are a world-class prompt engineer specializing in Midjourney V6, FLUX.1 Realism, and cinematic commercial photography.
 Original Concept: "${cleanedPrompt}"
 Requested Style: "${style || "photorealistic 8k"}"
@@ -6118,7 +6290,7 @@ Return ONLY valid JSON (no surrounding markdown code fences, pure parseable JSON
   "lyrics": "[Intro: Funky Slap Bass]\\n(E9 - A7)\\n\\n[Verse 1]\\nE9                  A7\\nVerse line 1...\\n\\n[Chorus: Main Hook]\\n...",
   "rawLyricsClean": "Verse line 1. Verse line 2. Chorus line 1. Chorus line 2."
 }`;
-  const modelsToTry = getPrioritizedModels(["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-flash-latest"]);
+  const modelsToTry = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
   for (const model of modelsToTry) {
     try {
       const res = await Promise.race([
@@ -6531,7 +6703,7 @@ Return ONLY valid JSON matching this exact structure:
     ]
   }
 }`;
-  const modelsToTry = getPrioritizedModels(["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-flash-latest"]);
+  const modelsToTry = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
   for (const model of modelsToTry) {
     try {
       const res = await Promise.race([
@@ -6539,7 +6711,6 @@ Return ONLY valid JSON matching this exact structure:
           model,
           contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
           config: {
-            temperature: 0.7,
             responseMimeType: "application/json"
           }
         }),
@@ -6722,7 +6893,7 @@ Return ONLY valid JSON matching this exact structure:
   ],
   "conclusion": "Forward-looking strategic synthesis projecting long-term paradigm shifts and architectural legacies."
 }`;
-  const modelsToTry = getPrioritizedModels(["gemini-3.8-flash", "gemini-2.5-pro", "gemini-flash-latest", "gemini-3.1-pro-preview", "gemini-flash-lite-latest"]);
+  const modelsToTry = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
   for (const model of modelsToTry) {
     try {
       const res = await Promise.race([
@@ -6730,8 +6901,7 @@ Return ONLY valid JSON matching this exact structure:
           model,
           contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
           config: {
-            responseMimeType: "application/json",
-            temperature: 0.2
+            responseMimeType: "application/json"
           }
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Deep research timeout")), 3e4))
@@ -7156,7 +7326,7 @@ Text to translate:
 """
 ${text.trim()}
 """`;
-  const models = getPrioritizedModels(["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-flash-latest"]);
+  const models = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
   for (const model of models) {
     try {
       const response = await Promise.race([
@@ -7164,8 +7334,7 @@ ${text.trim()}
           model,
           contents: [{ role: "user", parts: [{ text: prompt }] }],
           config: {
-            responseMimeType: "application/json",
-            temperature: 0.15
+            responseMimeType: "application/json"
           }
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Translate timeout")), 16e3))
@@ -7245,16 +7414,13 @@ Guidelines:
 - Ensure 100% factual accuracy based strictly on the provided text.
 - Do not add conversational fluff or preamble (e.g., do not say "Here is your summary").
 - Format bullet points cleanly and bold key ideas.`;
-  const models = getPrioritizedModels(["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-flash-latest"]);
+  const models = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
   for (const model of models) {
     try {
       const response = await Promise.race([
         ai.models.generateContent({
           model,
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          config: {
-            temperature: 0.2
-          }
+          contents: [{ role: "user", parts: [{ text: prompt }] }]
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Summarize timeout")), 9e3))
       ]);
@@ -7385,7 +7551,7 @@ A screenshot was provided by the user via Ctrl+V / upload. Carefully analyze thi
       }
     });
   }
-  const models = getPrioritizedModels(["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-flash-latest"]);
+  const models = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
   for (const model of models) {
     try {
       const modelConfig = {
@@ -7531,7 +7697,7 @@ Return ONLY a valid, parseable JSON object matching this schema:
     }
   ]
 }`;
-  const models = getPrioritizedModels(["gemini-3.8-flash", "gemini-flash-latest"]);
+  const models = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
   for (const model of models) {
     try {
       const response = await Promise.race([
@@ -7539,8 +7705,7 @@ Return ONLY a valid, parseable JSON object matching this schema:
           model,
           contents: [{ role: "user", parts: [{ text: prompt }] }],
           config: {
-            responseMimeType: "application/json",
-            temperature: 0.5
+            responseMimeType: "application/json"
           }
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Slide generation timeout")), 22e3))
@@ -7612,7 +7777,7 @@ async function generateVideoProjectWithAI(req) {
     songSpeed = "medium",
     songGenre = "Romantic & Melodic"
   } = req;
-  const models = getPrioritizedModels(["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-flash-latest"]);
+  const models = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
   const [w, h] = aspectRatio === "9:16" ? [720, 1280] : aspectRatio === "1:1" ? [1024, 1024] : [1280, 720];
   const speedBpm = songSpeed === "slow" ? 72 : songSpeed === "fast" ? 128 : songSpeed === "ultra-fast" ? 148 : 102;
   const vocalLabel = vocalistVoice === "female" ? "Female Vocalist (Aurat ki Awaaz: Sweet, Melodic Soprano & Heartfelt Tone)" : vocalistVoice === "duet" ? "Duet Harmony (Men + Women Joint Vocals)" : "Male Vocalist (Mard ki Awaaz: Deep, Soulful Baritone, Passionate Vocal Range)";
@@ -7864,7 +8029,7 @@ async function analyzeCameraFrameWithAI(imageBase64, customPrompt) {
   "keyTakeaways": ["Insight 1", "Insight 2", "Insight 3"],
   "confidenceScore": 96
 }`;
-  const modelsToTry = ["gemini-2.5-flash", "gemini-3.8-flash", "gemini-2.5-pro"];
+  const modelsToTry = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
   for (const model of modelsToTry) {
     try {
       const response = await ai.models.generateContent({
@@ -7935,7 +8100,7 @@ async function analyzeMediaWithAI(params) {
 }`;
   const userPrompt = `Analyze this ${mediaType} file named "${fileName}".
 Context / Provided transcript: "${transcriptText || "Audio/video discussion on next-gen tech workflow, system deployment, and productivity optimization."}"`;
-  const modelsToTry = ["gemini-2.5-flash", "gemini-3.8-flash"];
+  const modelsToTry = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
   for (const model of modelsToTry) {
     try {
       const response = await ai.models.generateContent({
@@ -8034,7 +8199,7 @@ Return a strictly valid JSON object with the following schema:
   "executionTime": "1.4s"
 }`;
   const userPrompt = `Autonomous Goal to execute: "${goal}". Context: "${context || "Execute with highest precision and verified agent actions."}"`;
-  const modelsToTry = ["gemini-2.5-flash", "gemini-3.8-flash"];
+  const modelsToTry = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
   for (const model of modelsToTry) {
     try {
       const response = await ai.models.generateContent({
@@ -8172,9 +8337,9 @@ Return ONLY valid JSON matching this schema:
   try {
     const res = await Promise.race([
       ai2.models.generateContent({
-        model: "gemini-3.8-flash",
+        model: "gemini-4-hydrogen",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: { responseMimeType: "application/json", temperature: 0.2 }
+        config: { responseMimeType: "application/json" }
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error("AI Table extraction timeout")), 1e4))
     ]);
@@ -8596,7 +8761,7 @@ app.post("/api/chat", async (req, res) => {
       messages,
       modelId,
       enableSearch: !!enableSearch,
-      enableReasoning: enableReasoning !== void 0 ? !!enableReasoning : true,
+      enableReasoning: !!enableReasoning,
       customInstructions,
       userName: userName ? String(userName).trim() : "User",
       preferredLanguage
@@ -8608,6 +8773,73 @@ app.post("/api/chat", async (req, res) => {
       error: error.message || "Internal server error",
       text: "Bexus AI is processing your request. Please clarify your prompt or try submitting again."
     });
+  }
+});
+app.post("/api/chat/stream", async (req, res) => {
+  try {
+    let { messages, message, prompt, history, attachments, modelId, enableSearch, enableReasoning, customInstructions, userName, preferredLanguage } = req.body;
+    if (!messages || !Array.isArray(messages)) {
+      const incomingText = message || prompt || "";
+      messages = [];
+      if (Array.isArray(history)) {
+        for (const h of history) {
+          if (h && typeof h === "object") {
+            messages.push({
+              role: h.role === "assistant" ? "assistant" : "user",
+              content: h.content || "",
+              attachments: h.attachments || []
+            });
+          }
+        }
+      }
+      if (incomingText || attachments && attachments.length > 0) {
+        messages.push({
+          role: "user",
+          content: incomingText,
+          attachments: attachments || []
+        });
+      }
+    }
+    if (!messages || messages.length === 0) {
+      return res.status(400).json({ error: "At least one message is required" });
+    }
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    if (typeof res.flushHeaders === "function") {
+      res.flushHeaders();
+    }
+    const result = await generateChatResponseStream(
+      {
+        messages,
+        modelId,
+        enableSearch: !!enableSearch,
+        enableReasoning: !!enableReasoning,
+        customInstructions,
+        userName: userName ? String(userName).trim() : "User",
+        preferredLanguage
+      },
+      (chunkText) => {
+        res.write(`data: ${JSON.stringify({ type: "chunk", text: chunkText })}
+
+`);
+      }
+    );
+    res.write(`data: ${JSON.stringify({ type: "done", fullText: result.fullText, groundingSources: result.groundingSources, isReasoning: result.isReasoning })}
+
+`);
+    res.end();
+  } catch (error) {
+    console.error("API /api/chat/stream error:", error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message || "Streaming error" });
+    } else {
+      res.write(`data: ${JSON.stringify({ type: "error", error: error.message || "Streaming interrupted" })}
+
+`);
+      res.end();
+    }
   }
 });
 app.post("/api/image/enhance", async (req, res) => {

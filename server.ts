@@ -3,7 +3,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import compression from 'compression';
-import { generateChatResponse, generateImageContent, enhancePromptWithAI, renderCleanImageBuffer, detectImageMimeType, composeSongWithAI, generateMindMapWithAI, runDeepResearchWithAI, generateSpeechWithGemini, pcmToWav, translateTextWithAI, summarizeDocumentWithAI, generateSlideDeckWithAI, generateAppWithAI, generateVideoProjectWithAI, analyzeCameraFrameWithAI, analyzeMediaWithAI, executeAgenticTaskWithAI } from './src/server/geminiService.ts';
+import { generateChatResponse, generateChatResponseStream, generateImageContent, enhancePromptWithAI, renderCleanImageBuffer, detectImageMimeType, composeSongWithAI, generateMindMapWithAI, runDeepResearchWithAI, generateSpeechWithGemini, pcmToWav, translateTextWithAI, summarizeDocumentWithAI, generateSlideDeckWithAI, generateAppWithAI, generateVideoProjectWithAI, analyzeCameraFrameWithAI, analyzeMediaWithAI, executeAgenticTaskWithAI } from './src/server/geminiService.ts';
 import { generateWorldClassApp } from './src/utils/worldClassAppTemplates.ts';
 import { scrapeUrlAndBuildTable, auditWebpageSeo, executeGitHubAction, executeNaturalAction } from './src/server/actionRunnerService.ts';
 
@@ -132,7 +132,7 @@ app.post('/api/chat', async (req, res) => {
       messages,
       modelId,
       enableSearch: !!enableSearch,
-      enableReasoning: enableReasoning !== undefined ? !!enableReasoning : true,
+      enableReasoning: !!enableReasoning,
       customInstructions,
       userName: userName ? String(userName).trim() : 'User',
       preferredLanguage,
@@ -145,6 +145,74 @@ app.post('/api/chat', async (req, res) => {
       error: error.message || 'Internal server error',
       text: 'Bexus AI is processing your request. Please clarify your prompt or try submitting again.'
     });
+  }
+});
+
+// High-speed Real-Time Streaming Chat API (SSE) powered by Gemini 4
+app.post('/api/chat/stream', async (req, res) => {
+  try {
+    let { messages, message, prompt, history, attachments, modelId, enableSearch, enableReasoning, customInstructions, userName, preferredLanguage } = req.body;
+
+    if (!messages || !Array.isArray(messages)) {
+      const incomingText = message || prompt || '';
+      messages = [];
+      if (Array.isArray(history)) {
+        for (const h of history) {
+          if (h && typeof h === 'object') {
+            messages.push({
+              role: h.role === 'assistant' ? 'assistant' : 'user',
+              content: h.content || '',
+              attachments: h.attachments || [],
+            });
+          }
+        }
+      }
+      if (incomingText || (attachments && attachments.length > 0)) {
+        messages.push({
+          role: 'user',
+          content: incomingText,
+          attachments: attachments || [],
+        });
+      }
+    }
+
+    if (!messages || messages.length === 0) {
+      return res.status(400).json({ error: 'At least one message is required' });
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    if (typeof (res as any).flushHeaders === 'function') {
+      (res as any).flushHeaders();
+    }
+
+    const result = await generateChatResponseStream(
+      {
+        messages,
+        modelId,
+        enableSearch: !!enableSearch,
+        enableReasoning: !!enableReasoning,
+        customInstructions,
+        userName: userName ? String(userName).trim() : 'User',
+        preferredLanguage,
+      },
+      (chunkText) => {
+        res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunkText })}\n\n`);
+      }
+    );
+
+    res.write(`data: ${JSON.stringify({ type: 'done', fullText: result.fullText, groundingSources: result.groundingSources, isReasoning: result.isReasoning })}\n\n`);
+    res.end();
+  } catch (error: any) {
+    console.error('API /api/chat/stream error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message || 'Streaming error' });
+    } else {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message || 'Streaming interrupted' })}\n\n`);
+      res.end();
+    }
   }
 });
 

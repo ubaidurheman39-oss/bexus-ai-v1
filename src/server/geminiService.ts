@@ -14,9 +14,9 @@ import { generateWorldClassApp } from '../utils/worldClassAppTemplates.ts';
 import { synthesizeIntelligentSlideDeck } from '../utils/slideDeckSynthesizer.ts';
 import type { SlideDeck, SlideItem } from '../types/index.ts';
 import { getClientDirectImageUrl } from '../utils/imageFallback.ts';
-import { generateNaturalConversationalReply } from '../utils/intelligentConversationalEngine.ts';
+import { generateNaturalConversationalReply, tryInstantDirectReply } from '../utils/intelligentConversationalEngine.ts';
 
-// Initialize Gemini Client with env fallback
+// Initialize Gemini Client with env fallback and mandatory telemetry header
 function getAIClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
   if (apiKey) {
@@ -29,10 +29,163 @@ function getAIClient(): GoogleGenAI {
       },
     });
   }
-  return new GoogleGenAI();
+  return new GoogleGenAI({
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
 }
 
 const ai = getAIClient();
+
+/**
+ * Fast factual knowledge lookup (Wikipedia REST + DuckDuckGo Instant Answer)
+ * Used alongside live LLM solvers whenever GEMINI_API_KEY is missing or exhausted.
+ */
+async function fetchInstantWebKnowledge(query: string): Promise<string | null> {
+  const cleanQ = (query || '')
+    .replace(/^(what is|who is|where is|explain|tell me about|define|how does|why does|describe)\s+/i, '')
+    .replace(/[?!.]+$/g, '')
+    .trim();
+  if (!cleanQ || cleanQ.length < 2) return null;
+
+  try {
+    const [ddgRes, wikiSearchRes] = await Promise.allSettled([
+      fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(cleanQ)}&format=json&no_html=1&skip_disambig=1`, {
+        signal: AbortSignal.timeout(2200),
+      }).then(r => (r.ok ? r.json() : null)),
+      fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanQ)}&srlimit=1&format=json&origin=*`, {
+        signal: AbortSignal.timeout(2200),
+      }).then(r => (r.ok ? r.json() : null)),
+    ]);
+
+    if (ddgRes.status === 'fulfilled' && ddgRes.value) {
+      const ddg = ddgRes.value;
+      const abstractText = (ddg.AbstractText || ddg.Answer || '').trim();
+      if (abstractText.length > 40) {
+        return abstractText;
+      }
+    }
+
+    if (wikiSearchRes.status === 'fulfilled' && wikiSearchRes.value?.query?.search?.[0]?.title) {
+      const topTitle = wikiSearchRes.value.query.search[0].title;
+      const sumRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topTitle)}`, {
+        signal: AbortSignal.timeout(2200),
+      });
+      if (sumRes.ok) {
+        const sumData: any = await sumRes.json();
+        const extract = (sumData?.extract || '').trim();
+        if (extract.length > 40 && sumData?.type !== 'disambiguation') {
+          return extract;
+        }
+      }
+    }
+  } catch {
+    // Silent fallback
+  }
+  return null;
+}
+
+/**
+ * Keyless open LLM fallback solver (AI Horde text inference) for real problem-solving
+ * when GEMINI_API_KEY is not configured in an external host like Vercel.
+ */
+async function runAiHordeTextSolver(
+  messages: Array<{ role: string; content: string }>,
+  preferredLanguage?: string
+): Promise<string | null> {
+  try {
+    const targetLang = preferredLanguage && preferredLanguage.toLowerCase() !== 'english' ? preferredLanguage : 'English';
+    const historyBlock = messages
+      .slice(-4)
+      .map(m => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content.slice(0, 600)}`)
+      .join('\n');
+
+    const prompt = `System: You are Bexus AI, an expert problem-solver and helpful assistant. Give an accurate, clear, step-by-step, practical answer strictly in ${targetLang}. Be concise, direct, and solve the exact user problem without filler.\n${historyBlock}\nAssistant:`;
+
+    const submitRes = await fetch('https://aihorde.net/api/v2/generate/text/async', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: '0000000000',
+        'Client-Agent': 'BexusAI:2.0:bexus',
+      },
+      body: JSON.stringify({
+        prompt,
+        params: {
+          max_context_length: 1024,
+          max_length: 260,
+          temperature: 0.35,
+          stop_sequence: ['\nUser:', 'User:', 'System:'],
+        },
+      }),
+      signal: AbortSignal.timeout(4000),
+    });
+
+    if (!submitRes.ok) return null;
+    const submitData: any = await submitRes.json();
+    const jobId = submitData?.id;
+    if (!jobId) return null;
+
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < 10500) {
+      await new Promise(resolve => setTimeout(resolve, 750));
+      const pollRes = await fetch(`https://aihorde.net/api/v2/generate/text/status/${jobId}`, {
+        signal: AbortSignal.timeout(2500),
+      });
+      if (!pollRes.ok) continue;
+      const pollData: any = await pollRes.json();
+      if (pollData?.done && pollData?.generations?.[0]?.text) {
+        const raw = String(pollData.generations[0].text).trim();
+        const cleaned = raw.replace(/^(Assistant:|Bexus AI:)\s*/i, '').replace(/\nUser:[\s\S]*$/i, '').trim();
+        if (cleaned.length >= 20) {
+          return cleaned;
+        }
+        return null;
+      }
+      if (pollData?.faulted || (pollData?.wait_time && pollData.wait_time > 25)) {
+        return null;
+      }
+    }
+  } catch {
+    // Timeout or network error
+  }
+  return null;
+}
+
+async function resolveIntelligentFallbackAnswer(req: GenerateChatRequest): Promise<string> {
+  const lastUserQuery = req.messages[req.messages.length - 1]?.content?.trim() || '';
+  const direct = tryInstantDirectReply(lastUserQuery, {
+    userName: req.userName,
+    lang: req.preferredLanguage,
+    voiceMode: false,
+  });
+  if (direct) return direct;
+
+  // Race live open LLM solver and fast factual knowledge lookup simultaneously
+  const [hordeRes, webRes] = await Promise.allSettled([
+    runAiHordeTextSolver(
+      req.messages.map(m => ({ role: m.role, content: m.content })),
+      req.preferredLanguage
+    ),
+    fetchInstantWebKnowledge(lastUserQuery),
+  ]);
+
+  if (hordeRes.status === 'fulfilled' && hordeRes.value) {
+    return hordeRes.value;
+  }
+  if (webRes.status === 'fulfilled' && webRes.value) {
+    return webRes.value;
+  }
+
+  return generateNaturalConversationalReply(lastUserQuery, {
+    userName: req.userName,
+    lang: req.preferredLanguage,
+    voiceMode: false,
+  });
+}
 
 // Intelligent Quota, Rate Limit & Service Availability Tracker
 const exhaustedModels = new Map<string, number>();
@@ -256,33 +409,44 @@ The user is browsing as an anonymous guest (no account signed in).
     });
   }
 
-  // Config options optimized for ultra-fast instant answers
-  const config: any = {
+  const lastUserQuery = req.messages[req.messages.length - 1]?.content?.trim() || '';
+  const wantsFreshWebInfo =
+    req.enableSearch ||
+    isDeepResearch ||
+    /\b(latest|today|current|news|price|weather|score|winner|2025|2026|right now|live)\b/i.test(lastUserQuery);
+
+  // Config options optimized for ultra-fast instant answers on Gemini 4
+  const baseConfig: any = {
     systemInstruction,
   };
 
-  if (isReasoning) {
-    config.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
+  if (wantsFreshWebInfo) {
+    baseConfig.tools = [{ googleSearch: {} }];
   }
 
-  if (req.enableSearch || isDeepResearch) {
-    config.tools = [{ googleSearch: {} }];
-  }
-
-  // Priority models optimized for fast, instantaneous answers (sub-second latency)
-  const baseModels = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
-
+  // Official active Gemini models per @google/genai guidelines: gemini-4-hydrogen (fast & smart) + gemini-3.1-flash-lite
+  const baseModels = ['gemini-4-hydrogen', 'gemini-3.1-flash-lite'];
   const modelsToTry = getPrioritizedModels(baseModels);
+  const activeClient = getAIClient();
+
+  // Instant zero-latency answer ONLY for pure exact math / standalone greetings / time
+  const instantReply = tryInstantDirectReply(lastUserQuery, {
+    userName: req.userName,
+    lang: req.preferredLanguage,
+    voiceMode: false,
+  });
+  if (instantReply && !req.messages.some(m => m.attachments && m.attachments.length > 0)) {
+    return {
+      text: instantReply,
+      groundingSources: [],
+      isReasoning: false,
+    };
+  }
 
   if (!process.env.GEMINI_API_KEY) {
-    const lastUserQuery = req.messages[req.messages.length - 1]?.content?.trim() || "";
-    const naturalReply = generateNaturalConversationalReply(lastUserQuery, {
-      userName: req.userName,
-      lang: req.preferredLanguage,
-      voiceMode: false,
-    });
+    const fallbackAnswer = await resolveIntelligentFallbackAnswer(req);
     return {
-      text: naturalReply,
+      text: fallbackAnswer,
       groundingSources: [],
       isReasoning: false,
     };
@@ -292,19 +456,24 @@ The user is browsing as an anonymous guest (no account signed in).
 
   for (const model of modelsToTry) {
     try {
-      const modelConfig: any = { ...config };
+      const modelConfig: any = { ...baseConfig };
 
-      // Adjust thinkingConfig per model compatibility - keep minimal for fast instant replies
-      if (isReasoning) {
-        modelConfig.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
+      if (model === 'gemini-4-hydrogen') {
+        modelConfig.thinkingConfig = {
+          thinkingLevel: isReasoning ? ThinkingLevel.HIGH : ThinkingLevel.LOW,
+        };
+      } else if (model === 'gemini-3.1-flash-lite') {
+        modelConfig.thinkingConfig = {
+          thinkingLevel: ThinkingLevel.MINIMAL,
+        };
       }
 
-      const timeoutMs = isReasoning || req.enableSearch || isDeepResearch ? 20000 : 4500;
+      const timeoutMs = isReasoning || wantsFreshWebInfo ? 20000 : 12000;
 
       let response: any;
       try {
         response = await Promise.race([
-          ai.models.generateContent({
+          activeClient.models.generateContent({
             model,
             contents,
             config: modelConfig,
@@ -314,12 +483,11 @@ The user is browsing as an anonymous guest (no account signed in).
           ),
         ]);
       } catch (firstErr: any) {
-        // If failed with tools or thinkingConfig (e.g. search quota 429), retry cleanly without them immediately
         if (modelConfig.tools || modelConfig.thinkingConfig) {
           delete modelConfig.tools;
           delete modelConfig.thinkingConfig;
           response = await Promise.race([
-            ai.models.generateContent({
+            activeClient.models.generateContent({
               model,
               contents,
               config: modelConfig,
@@ -338,7 +506,6 @@ The user is browsing as an anonymous guest (no account signed in).
         throw new Error(`Empty response from model ${model}`);
       }
 
-      // Safety filter: guarantee user identity dynamically matches current account name
       if (req.userName && req.userName.trim() && req.userName.trim().toLowerCase() !== 'user' && req.userName.trim().toLowerCase() !== 'guest explorer') {
         const targetName = req.userName.trim();
         if (!targetName.toLowerCase().includes('ubaid')) {
@@ -347,8 +514,7 @@ The user is browsing as an anonymous guest (no account signed in).
       } else {
         text = text.replace(/\bHello Ubaid\b/gi, 'Hello there').replace(/\bUbaid\b/gi, 'there');
       }
-      
-      // Extract search grounding sources
+
       const groundingChunks = (response.candidates?.[0] as any)?.groundingMetadata?.groundingChunks || [];
       const groundingSources = groundingChunks
         .filter((chunk: any) => chunk?.web?.uri)
@@ -366,7 +532,7 @@ The user is browsing as an anonymous guest (no account signed in).
     } catch (modelErr: any) {
       lastError = modelErr;
       const errMsg = String(modelErr?.message || modelErr);
-      const isAuthError = errMsg.includes('PERMISSION_DENIED') || errMsg.includes('API key') || errMsg.includes('insufficient authentication scopes');
+      const isAuthError = errMsg.includes('PERMISSION_DENIED') || errMsg.includes('API key') || errMsg.includes('API_KEY_INVALID') || errMsg.includes('insufficient authentication scopes');
       markModelExhausted(model, isTransientModelError(modelErr) ? 180_000 : 60_000);
       if (isAuthError) {
         break;
@@ -376,18 +542,155 @@ The user is browsing as an anonymous guest (no account signed in).
     }
   }
 
-  // Clean, Simple, Fast Intelligent Conversational Engine
-  const lastUserQuery = req.messages[req.messages.length - 1]?.content?.trim() || "";
-  const naturalReply = generateNaturalConversationalReply(lastUserQuery, {
+  console.warn('[Bexus Chat] Gemini unavailable, using live intelligent solver fallback:', lastError?.message || lastError);
+  const fallbackAnswer = await resolveIntelligentFallbackAnswer(req);
+
+  return {
+    text: fallbackAnswer,
+    groundingSources: [],
+    isReasoning: false,
+  };
+}
+
+/**
+ * Real-time SSE Streaming Gemini chat handler for sub-second first-token display
+ */
+export async function generateChatResponseStream(
+  req: GenerateChatRequest,
+  onChunk: (textChunk: string) => void
+): Promise<{
+  fullText: string;
+  groundingSources: Array<{ title: string; url: string; domain: string }>;
+  isReasoning: boolean;
+}> {
+  const lastUserQuery = req.messages[req.messages.length - 1]?.content?.trim() || '';
+  const instantReply = tryInstantDirectReply(lastUserQuery, {
     userName: req.userName,
     lang: req.preferredLanguage,
     voiceMode: false,
   });
 
+  if (instantReply && !req.messages.some(m => m.attachments && m.attachments.length > 0)) {
+    onChunk(instantReply);
+    return { fullText: instantReply, groundingSources: [], isReasoning: false };
+  }
+
+  if (!process.env.GEMINI_API_KEY) {
+    const fallbackText = await resolveIntelligentFallbackAnswer(req);
+    onChunk(fallbackText);
+    return { fullText: fallbackText, groundingSources: [], isReasoning: false };
+  }
+
+  const isReasoning = req.modelId === 'bexus-reasoning-pro' || !!req.enableReasoning;
+  const activeClient = getAIClient();
+
+  // Reuse full system instruction & message formatting cleanly by building minimal payload or delegating
+  const targetLang = req.preferredLanguage && req.preferredLanguage.toLowerCase() !== 'english' ? req.preferredLanguage : 'English';
+  const systemInstruction = `You are Bexus AI, a sharp, deeply intelligent, empathetic, and helpful AI assistant powered by Gemini.
+- Communicate naturally like a world-class senior engineer and thoughtful partner.
+- By default reply strictly in clear, natural ${targetLang} (even if the user writes in Roman Urdu/Hindi, understand 100% accurately and respond in crisp ${targetLang} unless they explicitly request another language).
+- Solve ANY problem completely, accurately, and practically with clear steps, code blocks (single runnable HTML/JS block if building a web UI), or thorough explanations.
+- Never deflect with questionnaires when the user asks you to fix or build something.
+${req.customInstructions ? `\nCustom Instructions: ${req.customInstructions}` : ''}`;
+
+  const recentMessages = req.messages.length > 20 ? req.messages.slice(-20) : req.messages;
+  const contents: any[] = [];
+  for (const msg of recentMessages) {
+    const parts: any[] = [];
+    if (msg.attachments && msg.attachments.length > 0) {
+      for (const att of msg.attachments) {
+        if (att.dataBase64 && att.mimeType.startsWith('image/')) {
+          const rawBase64 = att.dataBase64.includes('base64,') ? att.dataBase64.split('base64,')[1] : att.dataBase64;
+          parts.push({ inlineData: { mimeType: att.mimeType, data: rawBase64 } });
+        } else if (att.extractedText) {
+          parts.push({ text: `[Attached Document: ${att.mimeType} Content]:\n${att.extractedText}\n---` });
+        }
+      }
+    }
+    if (msg.content) parts.push({ text: msg.content });
+    if (parts.length > 0) {
+      contents.push({ role: msg.role === 'assistant' ? 'model' : 'user', parts });
+    }
+  }
+  if (contents.length === 0) {
+    contents.push({ role: 'user', parts: [{ text: 'Hello' }] });
+  }
+
+  const wantsFreshWebInfo =
+    req.enableSearch ||
+    req.enableDeepResearch ||
+    /\b(latest|today|current|news|price|weather|score|winner|2025|2026|right now|live)\b/i.test(lastUserQuery);
+
+  const modelsToTry = getPrioritizedModels(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
+
+  for (const model of modelsToTry) {
+    let streamedText = '';
+    try {
+      const modelConfig: any = {
+        systemInstruction,
+        thinkingConfig: {
+          thinkingLevel:
+            model === 'gemini-4-hydrogen'
+              ? isReasoning
+                ? ThinkingLevel.HIGH
+                : ThinkingLevel.LOW
+              : ThinkingLevel.MINIMAL,
+        },
+      };
+      if (wantsFreshWebInfo) {
+        modelConfig.tools = [{ googleSearch: {} }];
+      }
+
+      const streamResult = await activeClient.models.generateContentStream({
+        model,
+        contents,
+        config: modelConfig,
+      });
+
+      let lastCandidates: any = null;
+      for await (const chunk of streamResult) {
+        const piece = chunk.text || '';
+        if (piece) {
+          streamedText += piece;
+          onChunk(piece);
+        }
+        if ((chunk as any)?.candidates) {
+          lastCandidates = (chunk as any).candidates;
+        }
+      }
+
+      if (streamedText.trim()) {
+        const groundingChunks = lastCandidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        const groundingSources = groundingChunks
+          .filter((c: any) => c?.web?.uri)
+          .map((c: any) => ({
+            title: c.web.title || c.web.uri,
+            url: c.web.uri,
+            domain: new URL(c.web.uri).hostname.replace('www.', ''),
+          }));
+        return { fullText: streamedText, groundingSources, isReasoning };
+      }
+    } catch (err: any) {
+      const errMsg = String(err?.message || err);
+      markModelExhausted(model, isTransientModelError(err) ? 180_000 : 60_000);
+      if (streamedText.trim()) {
+        return { fullText: streamedText, groundingSources: [], isReasoning };
+      }
+      if (errMsg.includes('PERMISSION_DENIED') || errMsg.includes('API key') || errMsg.includes('API_KEY_INVALID')) {
+        break;
+      }
+    }
+  }
+
+  // Fallback to non-streaming / live solver if stream failed before first token
+  const fallback = await generateChatResponse(req);
+  if (fallback.text) {
+    onChunk(fallback.text);
+  }
   return {
-    text: naturalReply,
-    groundingSources: [],
-    isReasoning: false,
+    fullText: fallback.text,
+    groundingSources: fallback.groundingSources || [],
+    isReasoning: fallback.isReasoning,
   };
 }
 
@@ -512,7 +815,7 @@ National Geographic documentary photography, sharp focus on eyes, individual fur
 Grand cinematic perspective, atmospheric fog and volumetric lighting, intricate structural textures, pristine reflections.`;
   }
 
-  const models = getPrioritizedModels(['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite']);
+  const models = getPrioritizedModels(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
   const aiPrompt = `You are a world-class prompt engineer specializing in Midjourney V6, FLUX.1 Realism, and cinematic commercial photography.
 Original Concept: "${cleanedPrompt}"
 Requested Style: "${style || 'photorealistic 8k'}"
@@ -1164,7 +1467,7 @@ Return ONLY valid JSON (no surrounding markdown code fences, pure parseable JSON
   "rawLyricsClean": "Verse line 1. Verse line 2. Chorus line 1. Chorus line 2."
 }`;
 
-  const modelsToTry = getPrioritizedModels(['gemini-flash-lite-latest', 'gemini-3.8-flash', 'gemini-flash-latest']);
+  const modelsToTry = getPrioritizedModels(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
 
   for (const model of modelsToTry) {
     try {
@@ -1600,7 +1903,7 @@ Return ONLY valid JSON matching this exact structure:
   }
 }`;
 
-  const modelsToTry = getPrioritizedModels(['gemini-flash-lite-latest', 'gemini-3.8-flash', 'gemini-flash-latest']);
+  const modelsToTry = getPrioritizedModels(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
 
   for (const model of modelsToTry) {
     try {
@@ -1609,7 +1912,6 @@ Return ONLY valid JSON matching this exact structure:
           model,
           contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
           config: {
-            temperature: 0.7,
             responseMimeType: 'application/json',
           },
         }),
@@ -1810,7 +2112,7 @@ Return ONLY valid JSON matching this exact structure:
   "conclusion": "Forward-looking strategic synthesis projecting long-term paradigm shifts and architectural legacies."
 }`;
 
-  const modelsToTry = getPrioritizedModels(['gemini-3.8-flash', 'gemini-2.5-pro', 'gemini-flash-latest', 'gemini-3.1-pro-preview', 'gemini-flash-lite-latest']);
+  const modelsToTry = getPrioritizedModels(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
 
   for (const model of modelsToTry) {
     try {
@@ -1820,7 +2122,6 @@ Return ONLY valid JSON matching this exact structure:
           contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
           config: {
             responseMimeType: 'application/json',
-            temperature: 0.2,
           },
         }),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Deep research timeout')), 30000)),
@@ -2283,7 +2584,7 @@ Text to translate:
 ${text.trim()}
 """`;
 
-  const models = getPrioritizedModels(['gemini-flash-lite-latest', 'gemini-3.8-flash', 'gemini-flash-latest']);
+  const models = getPrioritizedModels(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
 
   for (const model of models) {
     try {
@@ -2293,7 +2594,6 @@ ${text.trim()}
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {
             responseMimeType: 'application/json',
-            temperature: 0.15,
           }
         }),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Translate timeout')), 16000))
@@ -2390,7 +2690,7 @@ Guidelines:
 - Do not add conversational fluff or preamble (e.g., do not say "Here is your summary").
 - Format bullet points cleanly and bold key ideas.`;
 
-  const models = getPrioritizedModels(['gemini-flash-lite-latest', 'gemini-3.8-flash', 'gemini-flash-latest']);
+  const models = getPrioritizedModels(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
 
   for (const model of models) {
     try {
@@ -2398,9 +2698,6 @@ Guidelines:
         ai.models.generateContent({
           model,
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          config: {
-            temperature: 0.2,
-          }
         }),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Summarize timeout')), 9000))
       ]);
@@ -2529,7 +2826,7 @@ A screenshot was provided by the user via Ctrl+V / upload. Carefully analyze thi
   }
 
   // Use fast, top-tier models with zero reasoning latency
-  const models = getPrioritizedModels(['gemini-flash-lite-latest', 'gemini-3.8-flash', 'gemini-flash-latest']);
+  const models = getPrioritizedModels(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
 
   for (const model of models) {
     try {
@@ -2712,7 +3009,7 @@ Return ONLY a valid, parseable JSON object matching this schema:
   ]
 }`;
 
-  const models = getPrioritizedModels(['gemini-3.8-flash', 'gemini-flash-latest']);
+  const models = getPrioritizedModels(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
 
   for (const model of models) {
     try {
@@ -2722,7 +3019,6 @@ Return ONLY a valid, parseable JSON object matching this schema:
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {
             responseMimeType: 'application/json',
-            temperature: 0.5,
           }
         }),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Slide generation timeout')), 22000))
@@ -2812,7 +3108,7 @@ export async function generateVideoProjectWithAI(req: GenerateVideoProjectReques
     songSpeed = 'medium',
     songGenre = 'Romantic & Melodic'
   } = req;
-  const models = getPrioritizedModels(['gemini-flash-lite-latest', 'gemini-3.8-flash', 'gemini-flash-latest']);
+  const models = getPrioritizedModels(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
 
   const [w, h] = aspectRatio === '9:16' ? [720, 1280] : aspectRatio === '1:1' ? [1024, 1024] : [1280, 720];
 
@@ -3106,7 +3402,7 @@ export async function analyzeCameraFrameWithAI(imageBase64: string, customPrompt
   "confidenceScore": 96
 }`;
 
-  const modelsToTry = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-2.5-pro'];
+  const modelsToTry = getPrioritizedModels(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
 
   for (const model of modelsToTry) {
     try {
@@ -3203,7 +3499,7 @@ export async function analyzeMediaWithAI(params: {
   const userPrompt = `Analyze this ${mediaType} file named "${fileName}".
 Context / Provided transcript: "${transcriptText || 'Audio/video discussion on next-gen tech workflow, system deployment, and productivity optimization.'}"`;
 
-  const modelsToTry = ['gemini-2.5-flash', 'gemini-3.8-flash'];
+  const modelsToTry = getPrioritizedModels(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
 
   for (const model of modelsToTry) {
     try {
@@ -3326,7 +3622,7 @@ Return a strictly valid JSON object with the following schema:
 
   const userPrompt = `Autonomous Goal to execute: "${goal}". Context: "${context || 'Execute with highest precision and verified agent actions.'}"`;
 
-  const modelsToTry = ['gemini-2.5-flash', 'gemini-3.8-flash'];
+  const modelsToTry = getPrioritizedModels(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
 
   for (const model of modelsToTry) {
     try {

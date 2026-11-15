@@ -396,9 +396,9 @@ export const VoiceStudioModal: React.FC<VoiceStudioModalProps> = ({
       { role: 'user', text: spokenQuery, time: nowTime }
     ]);
 
-    // Fast instant response for greetings & conversational small talk (strictly English)
+    // Fast instant response ONLY for pure standalone greetings/thanks (never intercept real questions starting with hello/how/time)
     const instantReply = generateNaturalConversationalReply(spokenQuery, { lang: 'English', voiceMode: true });
-    const isSmallTalk = /^(how are you|hoy are you|how r u|how do you do|kese ho|kaise ho|kya hal|kya haal|sab theek|hello|hi|hey|salam|assalam|aoa|who are you|tum kon ho|what can you do|kya kar sakte ho|ok|theek hai|thank you|thanks|shukriya|time|date)/i.test(spokenQuery.trim());
+    const isSmallTalk = /^(how are you|hoy are you|how r u|how do you do|kese ho|kaise ho|kya hal|kya hal hai|sab theek|sab theek hai|hello|hi|hey|salam|assalam|assalam o alaikum|aoa|ok|okay|theek hai|thank you|thanks|shukriya|what time is it|current time|todays date|today's date)[?!.\s]*$/i.test(spokenQuery.trim());
 
     if (isSmallTalk) {
       setDialogue(prev => [
@@ -410,7 +410,7 @@ export const VoiceStudioModal: React.FC<VoiceStudioModalProps> = ({
     }
 
     try {
-      // Call chat API for questions or complex topics (strictly English)
+      // Call chat API powered by Gemini for any question or problem (strictly English, fast voice latency)
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -419,8 +419,10 @@ export const VoiceStudioModal: React.FC<VoiceStudioModalProps> = ({
             ...dialogue.slice(-6).map(d => ({ role: d.role, content: d.text })),
             { role: 'user', content: spokenQuery }
           ],
-          modelId: 'gemini-3.8-flash',
-          preferredLanguage: 'English'
+          modelId: 'gemini-4-hydrogen',
+          enableReasoning: false,
+          preferredLanguage: 'English',
+          customInstructions: 'Give a direct, accurate, problem-solving answer in clear conversational English suitable for voice playback (concise but complete).'
         })
       });
 
@@ -431,7 +433,6 @@ export const VoiceStudioModal: React.FC<VoiceStudioModalProps> = ({
       const data = await res.json();
       let replyText = data.text;
 
-      // Filter out robotic or template fallbacks
       if (!replyText || replyText.includes('I understand your question about') || replyText.includes('I am listening.') || replyText.includes('How can I assist you further')) {
         replyText = instantReply;
       }

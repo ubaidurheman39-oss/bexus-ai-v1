@@ -1278,50 +1278,116 @@ export default function App() {
           setActiveSpokenLanguage(currentLang);
         }
 
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: newMessages.map(m => ({
-              role: m.role,
-              content: m.codeSnippet 
-                ? `${m.content}\n\n[Active Application: ${m.codeSnippet.title}]\n\`\`\`html\n${m.codeSnippet.code.slice(0, 1500)}\n...\n\`\`\`` 
-                : m.content,
-              attachments: m.attachments?.map(a => ({
-                type: a.type,
-                mimeType: a.mimeType,
-                dataBase64: a.dataBase64,
-                extractedText: a.extractedText,
-              }))
-            })),
-            modelId: selectedModel.id,
-            enableReasoning: isDeepSearchActive,
-            enableSearch: isDeepSearchActive,
-            customInstructions: selectedPersona.systemPrompt,
-            userName: currentUser?.name?.trim() || currentUser?.displayName?.trim() || (currentUser?.email ? currentUser.email.split('@')[0] : 'User'),
-            preferredLanguage: currentLang
-          }),
-        });
+        const chatPayload = {
+          messages: newMessages.map(m => ({
+            role: m.role,
+            content: m.codeSnippet 
+              ? `${m.content}\n\n[Active Application: ${m.codeSnippet.title}]\n\`\`\`html\n${m.codeSnippet.code.slice(0, 1500)}\n...\n\`\`\`` 
+              : m.content,
+            attachments: m.attachments?.map(a => ({
+              type: a.type,
+              mimeType: a.mimeType,
+              dataBase64: a.dataBase64,
+              extractedText: a.extractedText,
+            }))
+          })),
+          modelId: selectedModel.id,
+          enableReasoning: isDeepSearchActive,
+          enableSearch: isDeepSearchActive,
+          customInstructions: selectedPersona.systemPrompt,
+          userName: currentUser?.name?.trim() || currentUser?.displayName?.trim() || (currentUser?.email ? currentUser.email.split('@')[0] : 'User'),
+          preferredLanguage: currentLang
+        };
 
-        let data: any = null;
+        let data: any = { text: '' };
+        const streamMsgId = 'msg_asst_' + Date.now();
+        let usedStreaming = false;
+
         try {
-          const contentType = response.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            data = await response.json();
-          } else {
-            const raw = await response.text();
-            try {
-              data = JSON.parse(raw);
-            } catch {
-              data = { text: '' };
+          const streamRes = await fetch('/api/chat/stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(chatPayload),
+          });
+
+          const cType = streamRes.headers.get('content-type') || '';
+          if (streamRes.ok && cType.includes('text/event-stream') && streamRes.body) {
+            usedStreaming = true;
+            const reader = streamRes.body.getReader();
+            const decoder = new TextDecoder();
+            let sseBuffer = '';
+            let accumulatedText = '';
+            let firstTokenRevealed = false;
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              sseBuffer += decoder.decode(value, { stream: true });
+              const lines = sseBuffer.split('\n');
+              sseBuffer = lines.pop() || '';
+
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed.startsWith('data:')) continue;
+                try {
+                  const evt = JSON.parse(trimmed.slice(5).trim());
+                  if (evt.type === 'chunk' && evt.text) {
+                    accumulatedText += evt.text;
+                    if (!firstTokenRevealed) {
+                      firstTokenRevealed = true;
+                      setIsLoading(false);
+                    }
+                    setMessages([
+                      ...newMessages,
+                      {
+                        id: streamMsgId,
+                        role: 'assistant',
+                        content: accumulatedText,
+                        timestamp: Date.now(),
+                      }
+                    ]);
+                  } else if (evt.type === 'done') {
+                    if (evt.fullText && evt.fullText.length > accumulatedText.length) {
+                      accumulatedText = evt.fullText;
+                    }
+                  }
+                } catch {
+                  // Ignore partial SSE JSON line
+                }
+              }
             }
+            data = { text: accumulatedText };
           }
         } catch {
-          data = { text: '' };
+          usedStreaming = false;
         }
 
-        if (!response.ok && !data?.text) {
-          throw new Error(data?.error || `Server returned ${response.status}`);
+        if (!usedStreaming || !data?.text) {
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(chatPayload),
+          });
+
+          try {
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+              data = await response.json();
+            } else {
+              const raw = await response.text();
+              try {
+                data = JSON.parse(raw);
+              } catch {
+                data = { text: '' };
+              }
+            }
+          } catch {
+            data = { text: '' };
+          }
+
+          if (!response.ok && !data?.text) {
+            throw new Error(data?.error || `Server returned ${response.status}`);
+          }
         }
 
         sounds.playReceive();
@@ -1350,7 +1416,7 @@ export default function App() {
         const responseContent = data.text || 'Response received.';
 
         assistantMessage = {
-          id: 'msg_asst_' + Date.now(),
+          id: streamMsgId,
           role: 'assistant',
           content: responseContent,
           timestamp: Date.now(),

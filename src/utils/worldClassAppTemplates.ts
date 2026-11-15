@@ -1166,7 +1166,7 @@ function generateAiNeuralWorkspaceHtml(appTitle: string): string {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: [{ role: 'user', content: userPrompt }],
-            modelId: 'gemini-3.8-flash'
+            modelId: 'gemini-4-hydrogen'
           }),
           signal: controller.signal
         });

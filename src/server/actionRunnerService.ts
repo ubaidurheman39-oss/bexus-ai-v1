@@ -168,9 +168,9 @@ Return ONLY valid JSON matching this schema:
   try {
     const res = await Promise.race([
       ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-4-hydrogen',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        config: { responseMimeType: 'application/json', temperature: 0.2 }
+        config: { responseMimeType: 'application/json' }
       }),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error('AI Table extraction timeout')), 10000))
     ]);
