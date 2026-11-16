@@ -5214,12 +5214,12 @@ function getAIClient() {
 var ai = getAIClient();
 async function fetchInstantWebKnowledge(query) {
   const raw = (query || "").trim();
-  const isNonDefinitional = /\b(i have|my |not working|stopped working|broken|won't|wont|doesn't|doesnt|can't|cant|fix|solve|issue|problem|error|bug|help me|months? ago|days? ago|years? ago|charging|turn on|why is|why are|why does|how do|how to|compare|difference|sentences?)\b/i.test(raw);
-  const isFactualTopic = /^(what is|what are|who is|who was|where is|define|meaning of|capital of)\b/i.test(raw);
+  const isNonDefinitional = /\b(i have|my |not working|stopped working|broken|won't|wont|doesn't|doesnt|can't|cant|fix|solve|issue|problem|error|bug|help me|months? ago|days? ago|years? ago|charging|turn on|why is|why are|why does|how do|how to|compare|difference|sentences?|write a |code|function|risk|reward|trade|profit)\b/i.test(raw);
+  const isFactualTopic = /^(what is|what are|who is|who was|who invented|who discovered|who founded|where is|define|meaning of|capital of)\b/i.test(raw);
   if (isNonDefinitional || !isFactualTopic) {
     return null;
   }
-  const cleanQ = raw.replace(/^(what is|what are|who is|who was|where is|define|meaning of)\s+(?:a |an |the )?/i, "").replace(/[?!.]+$/g, "").trim();
+  const cleanQ = raw.replace(/^(what is|what are|who is|who was|who invented|who discovered|who founded|where is|define|meaning of)\s+(?:a |an |the )?/i, "").replace(/[?!.]+$/g, "").trim();
   if (!cleanQ || cleanQ.length < 2) return null;
   const coreWords = cleanQ.toLowerCase().split(/\s+/).filter((w) => w.length >= 3 && !["the", "and", "for", "with", "from", "about", "what", "capital"].includes(w));
   const isRelevantText = (title, body) => {
@@ -5230,10 +5230,10 @@ async function fetchInstantWebKnowledge(query) {
   try {
     const [ddgRes, wikiSearchRes] = await Promise.allSettled([
       fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(cleanQ)}&format=json&no_html=1&skip_disambig=1`, {
-        signal: AbortSignal.timeout(2e3)
+        signal: AbortSignal.timeout(2200)
       }).then((r) => r.ok ? r.json() : null),
       fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanQ)}&srlimit=1&format=json&origin=*`, {
-        signal: AbortSignal.timeout(2e3)
+        signal: AbortSignal.timeout(2200)
       }).then((r) => r.ok ? r.json() : null)
     ]);
     if (ddgRes.status === "fulfilled" && ddgRes.value) {
@@ -5246,7 +5246,7 @@ async function fetchInstantWebKnowledge(query) {
     if (wikiSearchRes.status === "fulfilled" && wikiSearchRes.value?.query?.search?.[0]?.title) {
       const topTitle = wikiSearchRes.value.query.search[0].title;
       const sumRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topTitle)}`, {
-        signal: AbortSignal.timeout(2e3)
+        signal: AbortSignal.timeout(2200)
       });
       if (sumRes.ok) {
         const sumData = await sumRes.json();
@@ -5261,27 +5261,55 @@ async function fetchInstantWebKnowledge(query) {
   return null;
 }
 function cleanOpenLlmOutput(raw) {
-  let out = (raw || "").replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<\/?think>/gi, "").trim();
+  let out = (raw || "").replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<think>[\s\S]*$/gi, "").replace(/<\/?think>/gi, "").replace(/<\|(?:im_end|eot_id|im_start|endoftext)\|>/gi, "").replace(/<\/s>/gi, "").trim();
   if (/^here['’]?s a thinking process:/i.test(out)) {
-    const splitMatch = out.match(/\n\n(?=(?:[A-Z]|1\.|###|\*\*)[^{\n]*)/);
-    if (splitMatch && splitMatch.index !== void 0) {
-      const paragraphs = out.split(/\n{2,}/).filter((p) => !/^(here['’]?s a thinking process:|1\.\s*\*\*analyze|-\s*\*\*user|-\s*\*\*goal|-\s*\*\*constraint)/i.test(p.trim()));
-      if (paragraphs.length > 0) {
-        out = paragraphs.join("\n\n").trim();
-      }
+    const paragraphs = out.split(/\n{2,}/).filter((p) => !/^(here['’]?s a thinking process:|1\.\s*\*\*analyze|-\s*\*\*user|-\s*\*\*goal|-\s*\*\*constraint)/i.test(p.trim()));
+    if (paragraphs.length > 0) {
+      out = paragraphs.join("\n\n").trim();
     }
   }
-  return out.replace(/^(Assistant:|Bexus AI:)\s*/i, "").replace(/\nUser:[\s\S]*$/i, "").trim();
+  return out.replace(/^(Assistant:|Bexus AI:)\s*/i, "").replace(/\n(?:User|Human):[\s\S]*$/i, "").trim();
 }
-async function runAiHordeTextSolver(messages, preferredLanguage, budgetMs = 5500) {
-  const deadline = Date.now() + budgetMs;
+var cachedFastHordeModels = {
+  models: [],
+  expiresAt: 0
+};
+async function getFastNonThinkingHordeModels() {
+  if (cachedFastHordeModels.models.length > 0 && Date.now() < cachedFastHordeModels.expiresAt) {
+    return cachedFastHordeModels.models;
+  }
+  try {
+    const res = await fetch("https://aihorde.net/api/v2/status/models?type=text", {
+      signal: AbortSignal.timeout(1600)
+    });
+    if (res.ok) {
+      const list = await res.json();
+      const filtered = list.filter(
+        (m) => m?.count >= 2 && (m?.queued ?? 99) <= 2 && !/think|r1|qwen3|reason/i.test(String(m?.name || "")) && !/270m|1b|30b|31b|32b|70b|72b|120b/i.test(String(m?.name || ""))
+      ).sort((a, b) => (b.performance || 0) - (a.performance || 0)).slice(0, 6).map((m) => String(m.name));
+      if (filtered.length > 0) {
+        cachedFastHordeModels = { models: filtered, expiresAt: Date.now() + 18e4 };
+        return filtered;
+      }
+    }
+  } catch {
+  }
+  return [];
+}
+async function runAiHordeTextSolver(messages, preferredLanguage, budgetMs = 15e3) {
   try {
     const targetLang = preferredLanguage && preferredLanguage.toLowerCase() !== "english" ? preferredLanguage : "English";
-    const lastUserMsg = [...messages].reverse().find((m) => m.role !== "assistant")?.content?.slice(0, 800) || "";
-    const prevContext = messages.length > 1 ? messages.slice(-3, -1).map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content.slice(0, 200)}`).join("\n") + "\n" : "";
-    const prompt = `System: You are Bexus AI, an expert problem-solver. Directly answer or solve the user's latest question in clear ${targetLang}. ${targetLang === "English" ? "Write 100% in natural English ONLY (no Roman Urdu/Hindi)." : ""} Never reply with vague greetings like "I'm happy to help you with that"\u2014always give the real answer.
-${prevContext}User: ${lastUserMsg}
-Assistant:`;
+    const lastUserMsg = [...messages].reverse().find((m) => m.role !== "assistant")?.content?.slice(0, 900) || "";
+    const prevContext = messages.length > 1 ? messages.slice(-3, -1).map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content.slice(0, 220)}`).join("\n") + "\n" : "";
+    const systemContent = `You are Bexus AI, an expert problem-solving assistant. Directly answer or solve the user's question accurately, concisely, and completely in clear ${targetLang}. ${targetLang === "English" ? "Write 100% in natural English ONLY (no Roman Urdu/Hindi)." : ""} Give exact math, clean code blocks when asked for code, and clear structured explanations. Never reply with vague greetings like "I'm happy to help you with that".
+/no_think`;
+    const prompt = `<|im_start|>system
+${systemContent}<|im_end|>
+<|im_start|>user
+${prevContext}${lastUserMsg}<|im_end|>
+<|im_start|>assistant
+`;
+    const fastModels = await getFastNonThinkingHordeModels();
     const submitRes = await fetch("https://aihorde.net/api/v2/generate/text/async", {
       method: "POST",
       headers: {
@@ -5291,25 +5319,27 @@ Assistant:`;
       },
       body: JSON.stringify({
         prompt,
+        ...fastModels.length > 0 ? { models: fastModels } : {},
         params: {
-          max_context_length: 1024,
-          max_length: 220,
-          temperature: 0.3,
-          stop_sequence: ["\nUser:", "User:", "System:", "<|im_end|>"]
+          max_context_length: 1280,
+          max_length: 320,
+          temperature: 0.25,
+          stop_sequence: ["<|im_end|>", "<|eot_id|>", "<|im_start|>", "\nUser:", "User:", "\nHuman:"]
         }
       }),
-      signal: AbortSignal.timeout(2200)
+      signal: AbortSignal.timeout(2600)
     });
     if (!submitRes.ok) return null;
     const submitData = await submitRes.json();
     const jobId = submitData?.id;
     if (!jobId) return null;
+    const deadline = Date.now() + budgetMs;
     while (Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 450));
+      await new Promise((resolve) => setTimeout(resolve, 420));
       const remaining = deadline - Date.now();
       if (remaining <= 200) break;
       const pollRes = await fetch(`https://aihorde.net/api/v2/generate/text/status/${jobId}`, {
-        signal: AbortSignal.timeout(Math.min(1800, remaining))
+        signal: AbortSignal.timeout(Math.min(2e3, remaining))
       });
       if (!pollRes.ok) continue;
       const pollData = await pollRes.json();
@@ -5321,7 +5351,7 @@ Assistant:`;
         }
         return null;
       }
-      if (pollData?.faulted || pollData?.wait_time && pollData.wait_time > 20) {
+      if (pollData?.faulted || pollData?.wait_time > 28 && (pollData?.queue_position ?? 0) > 6) {
         return null;
       }
     }
@@ -5376,8 +5406,10 @@ function markModelExhausted(model, cooldownMs = 12e4) {
 }
 function getPrioritizedModels(preferredModels) {
   const available = preferredModels.filter((m) => isModelAvailable(m));
-  const cooling = preferredModels.filter((m) => !isModelAvailable(m));
-  return [...available, ...cooling];
+  if (available.length > 0) {
+    return available;
+  }
+  return [preferredModels[preferredModels.length - 1]];
 }
 async function generateChatResponse(req) {
   const isReasoning = req.modelId === "bexus-reasoning-pro";
@@ -5575,7 +5607,7 @@ ${att.extractedText}
           thinkingLevel: ThinkingLevel.MINIMAL
         };
       }
-      const timeoutMs = isReasoning || wantsFreshWebInfo ? 24e3 : 16e3;
+      const timeoutMs = isReasoning || wantsFreshWebInfo ? 18e3 : 1e4;
       let response;
       try {
         response = await Promise.race([
@@ -5654,9 +5686,14 @@ ${text}` }] }],
       lastError = modelErr;
       const errMsg = String(modelErr?.message || modelErr);
       const isTimeout = errMsg.toLowerCase().includes("timeout");
+      const isDailyQuota = errMsg.includes("PerDay") || errMsg.includes("GenerateRequestsPerDay");
       const isAuthError = errMsg.includes("PERMISSION_DENIED") || errMsg.includes("API key") || errMsg.includes("API_KEY_INVALID") || errMsg.includes("insufficient authentication scopes");
-      if (!isTimeout) {
+      if (isDailyQuota) {
+        markModelExhausted(model, 30 * 6e4);
+      } else if (!isTimeout) {
         markModelExhausted(model, isTransientModelError(modelErr) ? 18e4 : 6e4);
+      } else {
+        markModelExhausted(model, 45e3);
       }
       if (isAuthError) {
         break;
@@ -5745,7 +5782,7 @@ ${att.extractedText}
       if (wantsFreshWebInfo) {
         modelConfig.tools = [{ googleSearch: {} }];
       }
-      const openTimeoutMs = isReasoning ? 24e3 : 16e3;
+      const openTimeoutMs = isReasoning || wantsFreshWebInfo ? 18e3 : 1e4;
       const streamResult = await Promise.race([
         activeClient.models.generateContentStream({
           model,
@@ -5757,9 +5794,21 @@ ${att.extractedText}
         )
       ]);
       let lastCandidates = null;
-      for await (const chunk of streamResult) {
-        const piece = chunk.text || "";
+      let firstChunkArrived = false;
+      const iterator = streamResult[Symbol.asyncIterator]();
+      while (true) {
+        const nextPromise = iterator.next();
+        const step = !firstChunkArrived ? await Promise.race([
+          nextPromise,
+          new Promise(
+            (_, reject) => setTimeout(() => reject(new Error(`First chunk timeout on ${model}`)), openTimeoutMs)
+          )
+        ]) : await nextPromise;
+        if (step.done) break;
+        const chunk = step.value;
+        const piece = chunk?.text || "";
         if (piece) {
+          firstChunkArrived = true;
           streamedText += piece;
           onChunk(piece);
         }
@@ -5779,8 +5828,13 @@ ${att.extractedText}
     } catch (err) {
       const errMsg = String(err?.message || err);
       const isTimeout = errMsg.toLowerCase().includes("timeout");
-      if (!isTimeout) {
+      const isDailyQuota = errMsg.includes("PerDay") || errMsg.includes("GenerateRequestsPerDay");
+      if (isDailyQuota) {
+        markModelExhausted(model, 30 * 6e4);
+      } else if (!isTimeout) {
         markModelExhausted(model, isTransientModelError(err) ? 18e4 : 6e4);
+      } else {
+        markModelExhausted(model, 45e3);
       }
       console.warn(`[Bexus Stream] Model ${model} failed (${errMsg})`);
       if (streamedText.trim()) {

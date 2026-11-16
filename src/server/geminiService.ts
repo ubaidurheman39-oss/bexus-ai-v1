@@ -46,16 +46,15 @@ const ai = getAIClient();
  */
 async function fetchInstantWebKnowledge(query: string): Promise<string | null> {
   const raw = (query || '').trim();
-  // Only use Wikipedia/DuckDuckGo for pure definitional topic lookups (not reasoning, troubleshooting, or formatting prompts)
-  const isNonDefinitional = /\b(i have|my |not working|stopped working|broken|won't|wont|doesn't|doesnt|can't|cant|fix|solve|issue|problem|error|bug|help me|months? ago|days? ago|years? ago|charging|turn on|why is|why are|why does|how do|how to|compare|difference|sentences?)\b/i.test(raw);
-  const isFactualTopic = /^(what is|what are|who is|who was|where is|define|meaning of|capital of)\b/i.test(raw);
+  const isNonDefinitional = /\b(i have|my |not working|stopped working|broken|won't|wont|doesn't|doesnt|can't|cant|fix|solve|issue|problem|error|bug|help me|months? ago|days? ago|years? ago|charging|turn on|why is|why are|why does|how do|how to|compare|difference|sentences?|write a |code|function|risk|reward|trade|profit)\b/i.test(raw);
+  const isFactualTopic = /^(what is|what are|who is|who was|who invented|who discovered|who founded|where is|define|meaning of|capital of)\b/i.test(raw);
 
   if (isNonDefinitional || !isFactualTopic) {
     return null;
   }
 
   const cleanQ = raw
-    .replace(/^(what is|what are|who is|who was|where is|define|meaning of)\s+(?:a |an |the )?/i, '')
+    .replace(/^(what is|what are|who is|who was|who invented|who discovered|who founded|where is|define|meaning of)\s+(?:a |an |the )?/i, '')
     .replace(/[?!.]+$/g, '')
     .trim();
   if (!cleanQ || cleanQ.length < 2) return null;
@@ -74,10 +73,10 @@ async function fetchInstantWebKnowledge(query: string): Promise<string | null> {
   try {
     const [ddgRes, wikiSearchRes] = await Promise.allSettled([
       fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(cleanQ)}&format=json&no_html=1&skip_disambig=1`, {
-        signal: AbortSignal.timeout(2000),
+        signal: AbortSignal.timeout(2200),
       }).then(r => (r.ok ? r.json() : null)),
       fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanQ)}&srlimit=1&format=json&origin=*`, {
-        signal: AbortSignal.timeout(2000),
+        signal: AbortSignal.timeout(2200),
       }).then(r => (r.ok ? r.json() : null)),
     ]);
 
@@ -92,7 +91,7 @@ async function fetchInstantWebKnowledge(query: string): Promise<string | null> {
     if (wikiSearchRes.status === 'fulfilled' && wikiSearchRes.value?.query?.search?.[0]?.title) {
       const topTitle = wikiSearchRes.value.query.search[0].title;
       const sumRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topTitle)}`, {
-        signal: AbortSignal.timeout(2000),
+        signal: AbortSignal.timeout(2200),
       });
       if (sumRes.ok) {
         const sumData: any = await sumRes.json();
@@ -109,49 +108,86 @@ async function fetchInstantWebKnowledge(query: string): Promise<string | null> {
 }
 
 /**
- * Strip leaked chain-of-thought blocks (e.g. <think>...</think> or "Here's a thinking process:")
+ * Strip leaked chain-of-thought blocks (including unclosed <think> tags) and chat artifacts
  */
 function cleanOpenLlmOutput(raw: string): string {
   let out = (raw || '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<think>[\s\S]*$/gi, '')
     .replace(/<\/?think>/gi, '')
+    .replace(/<\|(?:im_end|eot_id|im_start|endoftext)\|>/gi, '')
+    .replace(/<\/s>/gi, '')
     .trim();
 
   if (/^here['’]?s a thinking process:/i.test(out)) {
-    const splitMatch = out.match(/\n\n(?=(?:[A-Z]|1\.|###|\*\*)[^{\n]*)/);
-    if (splitMatch && splitMatch.index !== undefined) {
-      // Look for the actual final answer section after numbered analysis if present
-      const paragraphs = out.split(/\n{2,}/).filter(p => !/^(here['’]?s a thinking process:|1\.\s*\*\*analyze|-\s*\*\*user|-\s*\*\*goal|-\s*\*\*constraint)/i.test(p.trim()));
-      if (paragraphs.length > 0) {
-        out = paragraphs.join('\n\n').trim();
-      }
+    const paragraphs = out.split(/\n{2,}/).filter(p => !/^(here['’]?s a thinking process:|1\.\s*\*\*analyze|-\s*\*\*user|-\s*\*\*goal|-\s*\*\*constraint)/i.test(p.trim()));
+    if (paragraphs.length > 0) {
+      out = paragraphs.join('\n\n').trim();
     }
   }
 
   return out
     .replace(/^(Assistant:|Bexus AI:)\s*/i, '')
-    .replace(/\nUser:[\s\S]*$/i, '')
+    .replace(/\n(?:User|Human):[\s\S]*$/i, '')
     .trim();
 }
 
+let cachedFastHordeModels: { models: string[]; expiresAt: number } = {
+  models: [],
+  expiresAt: 0,
+};
+
+async function getFastNonThinkingHordeModels(): Promise<string[]> {
+  if (cachedFastHordeModels.models.length > 0 && Date.now() < cachedFastHordeModels.expiresAt) {
+    return cachedFastHordeModels.models;
+  }
+  try {
+    const res = await fetch('https://aihorde.net/api/v2/status/models?type=text', {
+      signal: AbortSignal.timeout(1600),
+    });
+    if (res.ok) {
+      const list: any[] = await res.json();
+      const filtered = list
+        .filter(
+          (m) =>
+            m?.count >= 2 &&
+            (m?.queued ?? 99) <= 2 &&
+            !/think|r1|qwen3|reason/i.test(String(m?.name || '')) &&
+            !/270m|1b|30b|31b|32b|70b|72b|120b/i.test(String(m?.name || ''))
+        )
+        .sort((a, b) => (b.performance || 0) - (a.performance || 0))
+        .slice(0, 6)
+        .map((m) => String(m.name));
+      if (filtered.length > 0) {
+        cachedFastHordeModels = { models: filtered, expiresAt: Date.now() + 180_000 };
+        return filtered;
+      }
+    }
+  } catch {
+    // Use open default pool if model list fetch times out
+  }
+  return [];
+}
+
 /**
- * Keyless open LLM fallback solver (AI Horde text inference) for real problem-solving
- * Bounded strictly under 7.8s so serverless platforms like Vercel Hobby never hit 10s 504 timeouts.
+ * Keyless open LLM fallback solver (AI Horde text inference) tuned for fast instruct models.
  */
 async function runAiHordeTextSolver(
   messages: Array<{ role: string; content: string }>,
   preferredLanguage?: string,
-  budgetMs = 5500
+  budgetMs = 15000
 ): Promise<string | null> {
-  const deadline = Date.now() + budgetMs;
   try {
     const targetLang = preferredLanguage && preferredLanguage.toLowerCase() !== 'english' ? preferredLanguage : 'English';
-    const lastUserMsg = [...messages].reverse().find(m => m.role !== 'assistant')?.content?.slice(0, 800) || '';
+    const lastUserMsg = [...messages].reverse().find(m => m.role !== 'assistant')?.content?.slice(0, 900) || '';
     const prevContext = messages.length > 1
-      ? messages.slice(-3, -1).map(m => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content.slice(0, 200)}`).join('\n') + '\n'
+      ? messages.slice(-3, -1).map(m => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content.slice(0, 220)}`).join('\n') + '\n'
       : '';
 
-    const prompt = `System: You are Bexus AI, an expert problem-solver. Directly answer or solve the user's latest question in clear ${targetLang}. ${targetLang === 'English' ? 'Write 100% in natural English ONLY (no Roman Urdu/Hindi).' : ''} Never reply with vague greetings like "I'm happy to help you with that"—always give the real answer.\n${prevContext}User: ${lastUserMsg}\nAssistant:`;
+    const systemContent = `You are Bexus AI, an expert problem-solving assistant. Directly answer or solve the user's question accurately, concisely, and completely in clear ${targetLang}. ${targetLang === 'English' ? 'Write 100% in natural English ONLY (no Roman Urdu/Hindi).' : ''} Give exact math, clean code blocks when asked for code, and clear structured explanations. Never reply with vague greetings like "I'm happy to help you with that".\n/no_think`;
+    const prompt = `<|im_start|>system\n${systemContent}<|im_end|>\n<|im_start|>user\n${prevContext}${lastUserMsg}<|im_end|>\n<|im_start|>assistant\n`;
+
+    const fastModels = await getFastNonThinkingHordeModels();
 
     const submitRes = await fetch('https://aihorde.net/api/v2/generate/text/async', {
       method: 'POST',
@@ -162,14 +198,15 @@ async function runAiHordeTextSolver(
       },
       body: JSON.stringify({
         prompt,
+        ...(fastModels.length > 0 ? { models: fastModels } : {}),
         params: {
-          max_context_length: 1024,
-          max_length: 220,
-          temperature: 0.3,
-          stop_sequence: ['\nUser:', 'User:', 'System:', '<|im_end|>'],
+          max_context_length: 1280,
+          max_length: 320,
+          temperature: 0.25,
+          stop_sequence: ['<|im_end|>', '<|eot_id|>', '<|im_start|>', '\nUser:', 'User:', '\nHuman:'],
         },
       }),
-      signal: AbortSignal.timeout(2200),
+      signal: AbortSignal.timeout(2600),
     });
 
     if (!submitRes.ok) return null;
@@ -177,13 +214,15 @@ async function runAiHordeTextSolver(
     const jobId = submitData?.id;
     if (!jobId) return null;
 
+    const deadline = Date.now() + budgetMs;
+
     while (Date.now() < deadline) {
-      await new Promise(resolve => setTimeout(resolve, 450));
+      await new Promise(resolve => setTimeout(resolve, 420));
       const remaining = deadline - Date.now();
       if (remaining <= 200) break;
 
       const pollRes = await fetch(`https://aihorde.net/api/v2/generate/text/status/${jobId}`, {
-        signal: AbortSignal.timeout(Math.min(1800, remaining)),
+        signal: AbortSignal.timeout(Math.min(2000, remaining)),
       });
       if (!pollRes.ok) continue;
       const pollData: any = await pollRes.json();
@@ -195,7 +234,7 @@ async function runAiHordeTextSolver(
         }
         return null;
       }
-      if (pollData?.faulted || (pollData?.wait_time && pollData.wait_time > 20)) {
+      if (pollData?.faulted || (pollData?.wait_time > 28 && (pollData?.queue_position ?? 0) > 6)) {
         return null;
       }
     }
@@ -283,10 +322,12 @@ export function markModelExhausted(model: string, cooldownMs = 120_000) {
 }
 
 export function getPrioritizedModels(preferredModels: string[]): string[] {
-  // Available models first, followed by cooldown models as extreme last resorts
   const available = preferredModels.filter(m => isModelAvailable(m));
-  const cooling = preferredModels.filter(m => !isModelAvailable(m));
-  return [...available, ...cooling];
+  if (available.length > 0) {
+    return available;
+  }
+  // If every model is in active cooldown, return the secondary lite model as a single probe instead of hammering a daily-exhausted model first
+  return [preferredModels[preferredModels.length - 1]];
 }
 
 export interface GenerateChatRequest {
@@ -532,7 +573,7 @@ The user is browsing as an anonymous guest (no account signed in).
         };
       }
 
-      const timeoutMs = isReasoning || wantsFreshWebInfo ? 24000 : 16000;
+      const timeoutMs = isReasoning || wantsFreshWebInfo ? 18000 : 10000;
 
       let response: any;
       try {
@@ -618,9 +659,14 @@ The user is browsing as an anonymous guest (no account signed in).
       lastError = modelErr;
       const errMsg = String(modelErr?.message || modelErr);
       const isTimeout = errMsg.toLowerCase().includes('timeout');
+      const isDailyQuota = errMsg.includes('PerDay') || errMsg.includes('GenerateRequestsPerDay');
       const isAuthError = errMsg.includes('PERMISSION_DENIED') || errMsg.includes('API key') || errMsg.includes('API_KEY_INVALID') || errMsg.includes('insufficient authentication scopes');
-      if (!isTimeout) {
+      if (isDailyQuota) {
+        markModelExhausted(model, 30 * 60_000);
+      } else if (!isTimeout) {
         markModelExhausted(model, isTransientModelError(modelErr) ? 180_000 : 60_000);
+      } else {
+        markModelExhausted(model, 45_000);
       }
       if (isAuthError) {
         break;
@@ -741,7 +787,7 @@ ${req.customInstructions ? `\nCustom Instructions: ${req.customInstructions}` : 
         modelConfig.tools = [{ googleSearch: {} }];
       }
 
-      const openTimeoutMs = isReasoning ? 24000 : 16000;
+      const openTimeoutMs = isReasoning || wantsFreshWebInfo ? 18000 : 10000;
       const streamResult = await Promise.race([
         activeClient.models.generateContentStream({
           model,
@@ -754,9 +800,25 @@ ${req.customInstructions ? `\nCustom Instructions: ${req.customInstructions}` : 
       ]);
 
       let lastCandidates: any = null;
-      for await (const chunk of streamResult) {
-        const piece = chunk.text || '';
+      let firstChunkArrived = false;
+      const iterator = streamResult[Symbol.asyncIterator]();
+
+      while (true) {
+        const nextPromise = iterator.next();
+        const step = !firstChunkArrived
+          ? await Promise.race([
+              nextPromise,
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error(`First chunk timeout on ${model}`)), openTimeoutMs)
+              ),
+            ])
+          : await nextPromise;
+
+        if (step.done) break;
+        const chunk = step.value;
+        const piece = chunk?.text || '';
         if (piece) {
+          firstChunkArrived = true;
           streamedText += piece;
           onChunk(piece);
         }
@@ -779,8 +841,13 @@ ${req.customInstructions ? `\nCustom Instructions: ${req.customInstructions}` : 
     } catch (err: any) {
       const errMsg = String(err?.message || err);
       const isTimeout = errMsg.toLowerCase().includes('timeout');
-      if (!isTimeout) {
+      const isDailyQuota = errMsg.includes('PerDay') || errMsg.includes('GenerateRequestsPerDay');
+      if (isDailyQuota) {
+        markModelExhausted(model, 30 * 60_000);
+      } else if (!isTimeout) {
         markModelExhausted(model, isTransientModelError(err) ? 180_000 : 60_000);
+      } else {
+        markModelExhausted(model, 45_000);
       }
       console.warn(`[Bexus Stream] Model ${model} failed (${errMsg})`);
       if (streamedText.trim()) {

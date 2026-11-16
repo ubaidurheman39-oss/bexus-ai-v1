@@ -995,8 +995,12 @@ export default function App() {
         return;
       }
 
-      const isImgReq = (
-        /(\b(generate|create|make|draw|render|produce)\s+(an?\s+)?(ai\s+)?(image|photo|picture|photograph|pic|imge|tasweer|wallpaper)\b)/i.test(lower) ||
+      const isInformationalQuestion =
+        /^(what is|what are|what does|why is|why are|why does|why do|how do|how does|how to|explain|define|tell me about|difference between)\b/i.test(lower) &&
+        !/https?:\/\//i.test(lower);
+
+      const isImgReq = !isInformationalQuestion && (
+        /(\b(generate|create|make|draw|render|produce)\s+(an?\s+)?(?:(?:ai|cinematic|realistic|hyper-realistic|photorealistic|8k|hd|ultra|beautiful|amazing)\s+)*(image|photo|picture|photograph|pic|imge|tasweer|wallpaper)\b)/i.test(lower) ||
         /^(image|photo|picture|tasweer)\s+(of|about|for)/i.test(lower) ||
         /(\b(tasweer|photo|image|pic)\s*(banao|bana do|bana de|chahiye)\b)/i.test(lower) ||
         /^(photo of|shot of|cinematic photo of)\s+/i.test(lower) ||
@@ -1180,9 +1184,12 @@ export default function App() {
           return updated;
         });
       } else if (
-        /(\b(data extract|extract data|table bana|table banao|table bana do|seo audit|github push|push kar do|push kardo|push to github|file push|action runner|api request|scrape url)\b)/i.test(lower) ||
-        (/(extract|scrape|table).*(from|se|of)\s+https?:\/\//i.test(lower)) ||
-        (/(seo|audit).*(of|ka|par|pe)\s+https?:\/\//i.test(lower))
+        !isInformationalQuestion && (
+          /(\b(data extract|extract data|table bana|table banao|table bana do|seo audit|github push|push kar do|push kardo|push to github|file push|action runner|scrape url)\b)/i.test(lower) ||
+          (/\b(make|send|run|execute|test|call)\s+(an?\s+)?api request\b/i.test(lower)) ||
+          (/(extract|scrape|table).*(from|se|of)\s+https?:\/\//i.test(lower)) ||
+          (/(seo|audit).*(of|ka|par|pe)\s+https?:\/\//i.test(lower))
+        )
       ) {
         let actionData: any = null;
         try {
@@ -1341,7 +1348,7 @@ export default function App() {
               if (!firstTokenRevealed) {
                 streamController.abort();
               }
-            }, isDeepSearchActive ? 25000 : 18000);
+            }, isDeepSearchActive ? 35000 : 26000);
 
             const streamRes = await fetch('/api/chat/stream', {
               method: 'POST',
@@ -1407,10 +1414,10 @@ export default function App() {
             usedStreaming = false;
           }
 
-          if ((!usedStreaming || isUnavailableStub(data?.text)) && Date.now() - startTime < 4500) {
+          if ((!usedStreaming || isUnavailableStub(data?.text)) && Date.now() - startTime < 15000) {
             try {
               const controller = new AbortController();
-              const timer = setTimeout(() => controller.abort(), 8000);
+              const timer = setTimeout(() => controller.abort(), 14000);
               const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1459,7 +1466,8 @@ export default function App() {
               clearTimeout(rescueTimer);
               if (rescueRes.ok) {
                 const rescueText = (await rescueRes.text()).trim();
-                if (rescueText && !rescueText.startsWith('{') && !isUnavailableStub(rescueText)) {
+                const isRateLimitText = /free limit reached|enter\.pollinations\.ai/i.test(rescueText);
+                if (rescueText && !isRateLimitText && !rescueText.startsWith('{') && !isUnavailableStub(rescueText)) {
                   data = { text: rescueText };
                 }
               }
