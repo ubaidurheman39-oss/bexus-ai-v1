@@ -75,9 +75,9 @@ function tryEvaluateMathExpression(query: string): number | null {
 }
 
 /**
- * Returns an instant reply ONLY for pure math, exact standalone greetings, or current time/date.
- * Returns `null` for ALL real questions, problems, coding queries, or general requests
- * so they always go straight to Gemini / Live AI Solver.
+ * Returns an instant deterministic reply ONLY for pure math expressions or current time/date queries
+ * so arithmetic is 100% mathematically exact while EVERY conversational message ("how are you", greetings,
+ * gratitude, questions, coding, etc.) is answered naturally by real live AI with conversation context.
  */
 export function tryInstantDirectReply(
   rawQuery: string,
@@ -93,52 +93,13 @@ export function tryInstantDirectReply(
   const normalizedLang = (options?.lang || '').toLowerCase();
   const isUrdu = normalizedLang === 'ur' || normalizedLang === 'ur-roman' || normalizedLang === 'urdu';
 
-  // 1. Instant exact arithmetic
+  // 1. Instant 100% exact deterministic arithmetic
   const mathAns = tryEvaluateMathExpression(query);
   if (mathAns !== null) {
     return isUrdu ? `Jawab hai: ${mathAns}` : `The answer is **${mathAns}**.`;
   }
 
-  // 2. Strictly standalone greetings ONLY (never intercept "hello how do I fix..." or "hello what is...")
-  if (/^(?:(?:hello|hi|hey|hola|salam|assalam|aoa)(?:\s+bexus(?:\s+ai)?)?\s*,?\s*)?(how are you|how are you doing|how is it going|how do you do|whats up|what's up|what is up|wassup)$/i.test(query)) {
-    return isUrdu
-      ? 'Main bilkul theek aur zabardast hoon! Aap sunayein, kya haal chaal hain?'
-      : "Hello! I'm doing great, thank you for asking. How can I help you today?";
-  }
-
-  if (/^(?:(?:hello|hi|hey|salam|assalam|aoa)\s*,?\s*)?(kese ho|kya hal|kya hal hai|sab theek|sab theek hai|kya chal raha hai)$/i.test(query)) {
-    return isUrdu
-      ? 'Main bilkul theek aur fresh hoon! Aap batayein, kis cheez me madad chahiye?'
-      : "Hello! I'm doing great, thank you! What question or problem can I help you solve today?";
-  }
-
-  if (/^(hello|hi|hey|hola|hello bexus|hi bexus|hey bexus|hello bexus ai|hi bexus ai)$/i.test(query)) {
-    return isUrdu
-      ? 'Hello! Main Bexus AI hoon. Batayein aaj kis cheez me madad chahiye?'
-      : 'Hello! I am Bexus AI. Ask me any question or describe any problem and I will help you solve it right away.';
-  }
-
-  if (/^(salam|assalam|assalam o alaikum|assalamualaikum|aoa)$/i.test(query)) {
-    return isUrdu
-      ? 'Walaikum Assalam! Bexus AI hazir hai, batayein aaj kya discuss ya solve karein?'
-      : 'Hello! Bexus AI is ready. What question or problem can I help you with today?';
-  }
-
-  if (
-    !/\?/.test(rawQuery) &&
-    !/\b(how|what|why|when|where|which|who|solve|write|fix|create|make|can you|could you|please|explain|tell me)\b/i.test(query) &&
-    /^(?:(?:many |so )?(?:thank you|thanks|thank u|thx|ty|shukriya|bohat shukriya|dhanyawad|appreciate(?: it)?)(?:\s+(?:so much|very much|a lot|bhai|bro|yar|yaar|bexus|ai|for|your|the|advice|help|support|answer|reply|guidance|time))*)$/i.test(query)
-  ) {
-    return isUrdu
-      ? 'Bohat shukriya! Mujhe aapki madad karke hamesha khushi hoti hai.'
-      : "You're very welcome! Glad I could help — feel free to ask anytime you need anything else.";
-  }
-
-  if (/^(ok|okay|theek hai|thek ha|good|great|nice|cool|zabardast|sahi|achha|acha)$/i.test(query)) {
-    return isUrdu ? 'Theek hai! Aage batayein kya karna hai?' : 'Got it! What would you like me to help you with next?';
-  }
-
-  // 3. Exact time / date queries only (avoid matching "time complexity", "date of independence")
+  // 2. Exact time / date queries only
   if (/^(what is the time|what time is it|current time|time please|time|waqt|kya time hai)$/i.test(query)) {
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     return isUrdu ? `Is waqt time ${timeStr} hai.` : `It is currently ${timeStr}.`;
@@ -152,6 +113,9 @@ export function tryInstantDirectReply(
   return null;
 }
 
+/**
+ * Extreme last-resort offline fallback used ONLY when all live AI models are unreachable.
+ */
 export function generateNaturalConversationalReply(
   rawQuery: string,
   options?: {
@@ -163,9 +127,32 @@ export function generateNaturalConversationalReply(
   const direct = tryInstantDirectReply(rawQuery, options);
   if (direct) return direct;
 
+  const query = cleanQuery(rawQuery);
   const original = (rawQuery || '').trim();
   const normalizedLang = (options?.lang || '').toLowerCase();
   const isUrdu = normalizedLang === 'ur' || normalizedLang === 'ur-roman' || normalizedLang === 'urdu';
+
+  if (/^(how are you|how are you doing|how is it going|how do you do|whats up|what's up|wassup|kese ho|kya hal|kya hal hai)$/i.test(query)) {
+    return isUrdu
+      ? 'Main bilkul theek hoon, shukriya! Aap kaise hain aur kis cheez me madad chahiye?'
+      : "I'm doing well, thanks for asking! How are you doing, and what would you like to work on today?";
+  }
+
+  if (/^(hello|hi|hey|hola|salam|assalam|assalam o alaikum|aoa)(?:\s+bexus(?:\s+ai)?)?$/i.test(query)) {
+    return isUrdu
+      ? 'Salam! Main Bexus AI hoon. Batayein aaj kis cheez me madad chahiye?'
+      : 'Hi there! I am Bexus AI. What can I help you with today?';
+  }
+
+  if (
+    !/\?/.test(original) &&
+    !/\b(how|what|why|when|where|which|who|solve|write|fix|create|make|can you|could you|please|explain|tell me)\b/i.test(query) &&
+    /^(?:(?:many |so )?(?:thank you|thanks|thank u|thx|ty|shukriya|bohat shukriya|dhanyawad|appreciate(?: it)?)(?:\s+(?:so much|very much|a lot|bhai|bro|yar|yaar|bexus|ai|for|your|the|advice|help|support|answer|reply|guidance|time))*)$/i.test(query)
+  ) {
+    return isUrdu
+      ? 'Bohat shukriya! Kabhi bhi koi madad chahiye ho to zaroor poochiye.'
+      : "You're very welcome! Let me know anytime you need anything else.";
+  }
 
   if (isUrdu) {
     return `Sorry, "${original}" par live AI connection abhi busy hai. Thori der mein dobara try karein ya sawal thora clear likhein.`;

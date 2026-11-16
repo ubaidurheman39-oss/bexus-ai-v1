@@ -5141,24 +5141,6 @@ function tryInstantDirectReply(rawQuery, options) {
   if (mathAns !== null) {
     return isUrdu ? `Jawab hai: ${mathAns}` : `The answer is **${mathAns}**.`;
   }
-  if (/^(?:(?:hello|hi|hey|hola|salam|assalam|aoa)(?:\s+bexus(?:\s+ai)?)?\s*,?\s*)?(how are you|how are you doing|how is it going|how do you do|whats up|what's up|what is up|wassup)$/i.test(query)) {
-    return isUrdu ? "Main bilkul theek aur zabardast hoon! Aap sunayein, kya haal chaal hain?" : "Hello! I'm doing great, thank you for asking. How can I help you today?";
-  }
-  if (/^(?:(?:hello|hi|hey|salam|assalam|aoa)\s*,?\s*)?(kese ho|kya hal|kya hal hai|sab theek|sab theek hai|kya chal raha hai)$/i.test(query)) {
-    return isUrdu ? "Main bilkul theek aur fresh hoon! Aap batayein, kis cheez me madad chahiye?" : "Hello! I'm doing great, thank you! What question or problem can I help you solve today?";
-  }
-  if (/^(hello|hi|hey|hola|hello bexus|hi bexus|hey bexus|hello bexus ai|hi bexus ai)$/i.test(query)) {
-    return isUrdu ? "Hello! Main Bexus AI hoon. Batayein aaj kis cheez me madad chahiye?" : "Hello! I am Bexus AI. Ask me any question or describe any problem and I will help you solve it right away.";
-  }
-  if (/^(salam|assalam|assalam o alaikum|assalamualaikum|aoa)$/i.test(query)) {
-    return isUrdu ? "Walaikum Assalam! Bexus AI hazir hai, batayein aaj kya discuss ya solve karein?" : "Hello! Bexus AI is ready. What question or problem can I help you with today?";
-  }
-  if (!/\?/.test(rawQuery) && !/\b(how|what|why|when|where|which|who|solve|write|fix|create|make|can you|could you|please|explain|tell me)\b/i.test(query) && /^(?:(?:many |so )?(?:thank you|thanks|thank u|thx|ty|shukriya|bohat shukriya|dhanyawad|appreciate(?: it)?)(?:\s+(?:so much|very much|a lot|bhai|bro|yar|yaar|bexus|ai|for|your|the|advice|help|support|answer|reply|guidance|time))*)$/i.test(query)) {
-    return isUrdu ? "Bohat shukriya! Mujhe aapki madad karke hamesha khushi hoti hai." : "You're very welcome! Glad I could help \u2014 feel free to ask anytime you need anything else.";
-  }
-  if (/^(ok|okay|theek hai|thek ha|good|great|nice|cool|zabardast|sahi|achha|acha)$/i.test(query)) {
-    return isUrdu ? "Theek hai! Aage batayein kya karna hai?" : "Got it! What would you like me to help you with next?";
-  }
   if (/^(what is the time|what time is it|current time|time please|time|waqt|kya time hai)$/i.test(query)) {
     const timeStr = (/* @__PURE__ */ new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     return isUrdu ? `Is waqt time ${timeStr} hai.` : `It is currently ${timeStr}.`;
@@ -5172,9 +5154,19 @@ function tryInstantDirectReply(rawQuery, options) {
 function generateNaturalConversationalReply(rawQuery, options) {
   const direct = tryInstantDirectReply(rawQuery, options);
   if (direct) return direct;
+  const query = cleanQuery(rawQuery);
   const original = (rawQuery || "").trim();
   const normalizedLang = (options?.lang || "").toLowerCase();
   const isUrdu = normalizedLang === "ur" || normalizedLang === "ur-roman" || normalizedLang === "urdu";
+  if (/^(how are you|how are you doing|how is it going|how do you do|whats up|what's up|wassup|kese ho|kya hal|kya hal hai)$/i.test(query)) {
+    return isUrdu ? "Main bilkul theek hoon, shukriya! Aap kaise hain aur kis cheez me madad chahiye?" : "I'm doing well, thanks for asking! How are you doing, and what would you like to work on today?";
+  }
+  if (/^(hello|hi|hey|hola|salam|assalam|assalam o alaikum|aoa)(?:\s+bexus(?:\s+ai)?)?$/i.test(query)) {
+    return isUrdu ? "Salam! Main Bexus AI hoon. Batayein aaj kis cheez me madad chahiye?" : "Hi there! I am Bexus AI. What can I help you with today?";
+  }
+  if (!/\?/.test(original) && !/\b(how|what|why|when|where|which|who|solve|write|fix|create|make|can you|could you|please|explain|tell me)\b/i.test(query) && /^(?:(?:many |so )?(?:thank you|thanks|thank u|thx|ty|shukriya|bohat shukriya|dhanyawad|appreciate(?: it)?)(?:\s+(?:so much|very much|a lot|bhai|bro|yar|yaar|bexus|ai|for|your|the|advice|help|support|answer|reply|guidance|time))*)$/i.test(query)) {
+    return isUrdu ? "Bohat shukriya! Kabhi bhi koi madad chahiye ho to zaroor poochiye." : "You're very welcome! Let me know anytime you need anything else.";
+  }
   if (isUrdu) {
     return `Sorry, "${original}" par live AI connection abhi busy hai. Thori der mein dobara try karein ya sawal thora clear likhein.`;
   }
@@ -5431,6 +5423,7 @@ async function generateChatResponse(req) {
 HUMAN-LIKE NATURAL CONVERSATION & EMPATHY:
 - Communicate like a real, world-class senior engineer and thoughtful AI partner (exactly like Claude, ChatGPT, or Gemini Advanced).
 - Talk naturally, genuinely, and responsively without sounding like a robotic script or canned template.
+- Match the user's opening naturally: if they ask "how are you" without saying "hello", reply warmly and directly (e.g., "I'm doing well, thanks for asking! How are you?") without awkwardly prepending "Hello!".
 - When the user expresses frustration, gives feedback, or speaks informally (e.g. "yar isko theek karo", "nakli ai ki tarah mat bolo", "tension ho rahi hai"), relate to them directly with understanding, acknowledge what they meant, and give real, thoughtful, helpful answers.
 - Never use robotic pre-scripted canned lists unless specifically asked for feature breakdowns.
 
@@ -5743,6 +5736,7 @@ async function generateChatResponseStream(req, onChunk) {
   const targetLang = req.preferredLanguage && req.preferredLanguage.toLowerCase() !== "english" ? req.preferredLanguage : "English";
   const systemInstruction = `You are Bexus AI, a sharp, deeply intelligent, empathetic, and helpful AI assistant powered by Gemini.
 - Communicate naturally like a world-class senior engineer and thoughtful partner.
+- Match the user's conversational opening naturally (for example, if they ask "how are you" without saying "hello", reply directly and warmly without forcing "Hello!").
 - By default reply strictly in clear, natural ${targetLang} (even if the user writes in Roman Urdu/Hindi, understand 100% accurately and respond in crisp ${targetLang} unless they explicitly request another language).
 - Solve ANY problem completely, accurately, and practically with clear steps, code blocks (single runnable HTML/JS block if building a web UI), or thorough explanations.
 - Never deflect with questionnaires when the user asks you to fix or build something.
