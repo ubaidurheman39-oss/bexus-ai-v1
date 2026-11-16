@@ -5104,14 +5104,15 @@ function getClientDirectImageUrl(prompt, width = 1280) {
 
 // src/utils/intelligentConversationalEngine.ts
 function cleanQuery(input) {
-  return (input || "").trim().replace(/[?!.,;:]+$/g, "").toLowerCase().replace(/\bhoy\b/g, "how").replace(/\bhw\b/g, "how").replace(/\br\b/g, "are").replace(/\bu\b/g, "you").replace(/\bur\b/g, "your").replace(/\bkesy\b/g, "kese").replace(/\bkaise\b/g, "kese").replace(/\bhaal\b/g, "hal").replace(/\bha\b/g, "hai").trim();
+  return (input || "").trim().replace(/[?!.,;:]+$/g, "").toLowerCase().replace(/\b(what|how|where|who|when|which)\s+si\b/g, "$1 is").replace(/\bwat\s+(is|si)\b/g, "what is").replace(/\bwht\s+(is|si)\b/g, "what is").replace(/\bwhats\b|\bwhat's\b/g, "what is").replace(/\bhoy\b/g, "how").replace(/\bhw\b/g, "how").replace(/\br\b/g, "are").replace(/\bu\b/g, "you").replace(/\bur\b/g, "your").replace(/\bkesy\b/g, "kese").replace(/\bkaise\b/g, "kese").replace(/\bhaal\b/g, "hal").replace(/\bha\b/g, "hai").replace(/\s+/g, " ").trim();
 }
 function tryEvaluateMathExpression(query) {
-  const pct = query.match(/^([0-9.]+)\s*%\s*(?:of)?\s*([0-9.]+)$/);
+  let clean = query.replace(/^(hello|hi|hey|bexus|ai|please|pls|can you|tell me|find|solve|calculate|eval|evaluate)\s+/gi, "").replace(/^(hello|hi|hey|bexus|ai)\s+/gi, "").replace(/^(what is|how much is|calculate|solve|eval|evaluate)\s+/i, "").replace(/\s+(equals to|equal to|equals|is what)$/i, "").trim();
+  const pct = clean.match(/^([0-9.]+)\s*%\s*(?:of)?\s*([0-9.]+)$/);
   if (pct) {
-    return parseFloat(pct[1]) / 100 * parseFloat(pct[2]);
+    return Math.round(parseFloat(pct[1]) / 100 * parseFloat(pct[2]) * 1e5) / 1e5;
   }
-  const normalized = query.replace(/^(what is|calculate|solve|eval|evaluate)\s+/i, "").replace(/\bplus\b/gi, "+").replace(/\bminus\b/gi, "-").replace(/\btimes\b|\bmultiplied by\b|\binto\b/gi, "*").replace(/\bdivided by\b/gi, "/").replace(/×/g, "*").replace(/÷/g, "/").trim();
+  const normalized = clean.replace(/\bplus\b|\badded to\b|\badd\b/gi, "+").replace(/\bminus\b|\bsubtract\b|\bless\b/gi, "-").replace(/\btimes\b|\bmultiplied by\b|\bmultiply by\b|\binto\b/gi, "*").replace(/\bdivided by\b|\bover\b/gi, "/").replace(/×/g, "*").replace(/÷/g, "/").trim();
   if (!/^[0-9+\-*/().\s]+$/.test(normalized)) return null;
   if (!/[0-9]/.test(normalized) || !/[+\-*/]/.test(normalized)) return null;
   try {
@@ -5131,16 +5132,16 @@ function tryInstantDirectReply(rawQuery, options) {
   const isUrdu = normalizedLang === "ur" || normalizedLang === "ur-roman" || normalizedLang === "urdu";
   const mathAns = tryEvaluateMathExpression(query);
   if (mathAns !== null) {
-    return isUrdu ? `Jawab hai: ${mathAns}` : `The answer is ${mathAns}.`;
+    return isUrdu ? `Jawab hai: ${mathAns}` : `The answer is **${mathAns}**.`;
   }
-  if (/^(how are you|how are u|how are you doing|how is it going|how do you do|whats up|what's up|wassup)$/i.test(query)) {
-    return isUrdu ? "Main bilkul theek aur zabardast hoon! Aap sunayein, kya haal chaal hain?" : "I'm doing great, thank you! Ask me any question or describe any problem and I'll help solve it right away.";
+  if (/^(?:(?:hello|hi|hey|hola|salam|assalam|aoa)(?:\s+bexus(?:\s+ai)?)?\s*,?\s*)?(how are you|how are you doing|how is it going|how do you do|whats up|what's up|what is up|wassup)$/i.test(query)) {
+    return isUrdu ? "Main bilkul theek aur zabardast hoon! Aap sunayein, kya haal chaal hain?" : "Hello! I'm doing great, thank you for asking. How can I help you today?";
   }
-  if (/^(kese ho|kya hal|kya hal hai|sab theek|sab theek hai|kya chal raha hai)$/i.test(query)) {
-    return isUrdu ? "Main bilkul theek aur fresh hoon! Aap batayein, kis cheez me madad chahiye?" : "I'm doing great, thank you! What question or problem can I help you solve today?";
+  if (/^(?:(?:hello|hi|hey|salam|assalam|aoa)\s*,?\s*)?(kese ho|kya hal|kya hal hai|sab theek|sab theek hai|kya chal raha hai)$/i.test(query)) {
+    return isUrdu ? "Main bilkul theek aur fresh hoon! Aap batayein, kis cheez me madad chahiye?" : "Hello! I'm doing great, thank you! What question or problem can I help you solve today?";
   }
-  if (/^(hello|hi|hey|hola|hello bexus|hi bexus|hey bexus)$/i.test(query)) {
-    return isUrdu ? "Hello! Main Bexus AI hoon. Batayein aaj kis cheez me madad chahiye?" : "Hello! I am Bexus AI. Ask me anything\u2014from coding and troubleshooting to science, writing, or daily problems.";
+  if (/^(hello|hi|hey|hola|hello bexus|hi bexus|hey bexus|hello bexus ai|hi bexus ai)$/i.test(query)) {
+    return isUrdu ? "Hello! Main Bexus AI hoon. Batayein aaj kis cheez me madad chahiye?" : "Hello! I am Bexus AI. Ask me any question or describe any problem and I will help you solve it right away.";
   }
   if (/^(salam|assalam|assalam o alaikum|assalamualaikum|aoa)$/i.test(query)) {
     return isUrdu ? "Walaikum Assalam! Bexus AI hazir hai, batayein aaj kya discuss ya solve karein?" : "Hello! Bexus AI is ready. What question or problem can I help you with today?";
@@ -5184,7 +5185,7 @@ async function getSharp() {
   }
 }
 function getAIClient() {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = (process.env.GEMINI_API_KEY || "").trim();
   if (apiKey) {
     return new GoogleGenAI({
       apiKey,
@@ -5259,13 +5260,14 @@ function cleanOpenLlmOutput(raw) {
   }
   return out.replace(/^(Assistant:|Bexus AI:)\s*/i, "").replace(/\nUser:[\s\S]*$/i, "").trim();
 }
-async function runAiHordeTextSolver(messages, preferredLanguage) {
-  const deadline = Date.now() + 7500;
+async function runAiHordeTextSolver(messages, preferredLanguage, budgetMs = 5500) {
+  const deadline = Date.now() + budgetMs;
   try {
     const targetLang = preferredLanguage && preferredLanguage.toLowerCase() !== "english" ? preferredLanguage : "English";
-    const historyBlock = messages.slice(-4).map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content.slice(0, 500)}`).join("\n");
-    const prompt = `System: You are Bexus AI, an expert problem-solver and helpful assistant. Give an accurate, clear, step-by-step, practical answer strictly in ${targetLang}. Do NOT show internal thinking steps\u2014output only the direct helpful answer.
-${historyBlock}
+    const lastUserMsg = [...messages].reverse().find((m) => m.role !== "assistant")?.content?.slice(0, 800) || "";
+    const prevContext = messages.length > 1 ? messages.slice(-3, -1).map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content.slice(0, 200)}`).join("\n") + "\n" : "";
+    const prompt = `System: You are Bexus AI, an expert problem-solver. Directly answer or solve the user's latest question in clear ${targetLang}. ${targetLang === "English" ? "Write 100% in natural English ONLY (no Roman Urdu/Hindi)." : ""} Never reply with vague greetings like "I'm happy to help you with that"\u2014always give the real answer.
+${prevContext}User: ${lastUserMsg}
 Assistant:`;
     const submitRes = await fetch("https://aihorde.net/api/v2/generate/text/async", {
       method: "POST",
@@ -5278,29 +5280,30 @@ Assistant:`;
         prompt,
         params: {
           max_context_length: 1024,
-          max_length: 200,
-          temperature: 0.35,
+          max_length: 220,
+          temperature: 0.3,
           stop_sequence: ["\nUser:", "User:", "System:", "<|im_end|>"]
         }
       }),
-      signal: AbortSignal.timeout(2500)
+      signal: AbortSignal.timeout(2200)
     });
     if (!submitRes.ok) return null;
     const submitData = await submitRes.json();
     const jobId = submitData?.id;
     if (!jobId) return null;
     while (Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 450));
       const remaining = deadline - Date.now();
       if (remaining <= 200) break;
       const pollRes = await fetch(`https://aihorde.net/api/v2/generate/text/status/${jobId}`, {
-        signal: AbortSignal.timeout(Math.min(2e3, remaining))
+        signal: AbortSignal.timeout(Math.min(1800, remaining))
       });
       if (!pollRes.ok) continue;
       const pollData = await pollRes.json();
       if (pollData?.done && pollData?.generations?.[0]?.text) {
         const cleaned = cleanOpenLlmOutput(String(pollData.generations[0].text));
-        if (cleaned.length >= 20) {
+        const isGenericFiller = /^(i'?m happy to help|how can i help you today|i am here to assist)/i.test(cleaned) && cleaned.length < 110;
+        if (cleaned.length >= 4 && !isGenericFiller) {
           return cleaned;
         }
         return null;
@@ -5505,6 +5508,16 @@ ${att.extractedText}
       parts: [{ text: "Hello" }]
     });
   }
+  const isStrictEnglishDefault = !req.preferredLanguage || req.preferredLanguage.toLowerCase() === "english";
+  const lastUserRaw = req.messages[req.messages.length - 1]?.content?.trim() || "";
+  if (isStrictEnglishDefault && /\b(yar|yaar|kya|kaise|kese|karo|karoon|batao|banao|hai|hain|mera|meri|mujhe|nahi|nhi|theek|masla|gaya|chahiye|koi)\b/i.test(lastUserRaw)) {
+    const lastEntry = contents[contents.length - 1];
+    if (lastEntry?.role === "user" && Array.isArray(lastEntry.parts)) {
+      lastEntry.parts.push({
+        text: "\n[Important: Respond strictly and completely in fluent English only. Do NOT use Roman Urdu or Urdu in your reply.]"
+      });
+    }
+  }
   const lastUserQuery = req.messages[req.messages.length - 1]?.content?.trim() || "";
   const wantsFreshWebInfo = req.enableSearch || isDeepResearch || /\b(latest|today|current|news|price|weather|score|winner|2025|2026|right now|live)\b/i.test(lastUserQuery);
   const baseConfig = {
@@ -5513,7 +5526,7 @@ ${att.extractedText}
   if (wantsFreshWebInfo) {
     baseConfig.tools = [{ googleSearch: {} }];
   }
-  const baseModels = isReasoning ? ["gemini-4-hydrogen", "gemini-3.1-flash-lite"] : ["gemini-3.1-flash-lite", "gemini-4-hydrogen"];
+  const baseModels = ["gemini-4-hydrogen", "gemini-3.1-flash-lite"];
   const modelsToTry = getPrioritizedModels(baseModels);
   const activeClient = getAIClient();
   const instantReply = tryInstantDirectReply(lastUserQuery, {
@@ -5549,7 +5562,7 @@ ${att.extractedText}
           thinkingLevel: ThinkingLevel.MINIMAL
         };
       }
-      const timeoutMs = isReasoning || wantsFreshWebInfo ? 14e3 : 6500;
+      const timeoutMs = isReasoning || wantsFreshWebInfo ? 12e3 : 6e3;
       let response;
       try {
         response = await Promise.race([
@@ -5584,6 +5597,27 @@ ${att.extractedText}
       if (!text && !response.candidates?.[0]) {
         throw new Error(`Empty response from model ${model}`);
       }
+      if (isStrictEnglishDefault) {
+        const romanMatches = text.match(/\b(yaar|yar|aap|karo|karen|hai|hain|mein|nahi|nhi|toh|gaya|hota|raha|batao|theek)\b/gi) || [];
+        if (romanMatches.length >= 3) {
+          try {
+            const rewriteRes = await Promise.race([
+              activeClient.models.generateContent({
+                model: "gemini-3.1-flash-lite",
+                contents: [{ role: "user", parts: [{ text: `Translate and rewrite the following assistant answer into clear, natural English only, preserving all helpful technical details:
+
+${text}` }] }],
+                config: { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } }
+              }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error("Rewrite timeout")), 3500))
+            ]);
+            if (rewriteRes.text?.trim()) {
+              text = rewriteRes.text.trim();
+            }
+          } catch {
+          }
+        }
+      }
       if (req.userName && req.userName.trim() && req.userName.trim().toLowerCase() !== "user" && req.userName.trim().toLowerCase() !== "guest explorer") {
         const targetName = req.userName.trim();
         if (!targetName.toLowerCase().includes("ubaid")) {
@@ -5606,8 +5640,11 @@ ${att.extractedText}
     } catch (modelErr) {
       lastError = modelErr;
       const errMsg = String(modelErr?.message || modelErr);
+      const isTimeout = errMsg.toLowerCase().includes("timeout");
       const isAuthError = errMsg.includes("PERMISSION_DENIED") || errMsg.includes("API key") || errMsg.includes("API_KEY_INVALID") || errMsg.includes("insufficient authentication scopes");
-      markModelExhausted(model, isTransientModelError(modelErr) ? 18e4 : 6e4);
+      if (!isTimeout) {
+        markModelExhausted(model, isTransientModelError(modelErr) ? 18e4 : 6e4);
+      }
       if (isAuthError) {
         break;
       }
@@ -5673,10 +5710,16 @@ ${att.extractedText}
   if (contents.length === 0) {
     contents.push({ role: "user", parts: [{ text: "Hello" }] });
   }
+  if ((!req.preferredLanguage || req.preferredLanguage.toLowerCase() === "english") && /\b(yar|yaar|kya|kaise|kese|karo|karoon|batao|banao|hai|hain|mera|meri|mujhe|nahi|nhi|theek|masla|gaya|chahiye|koi)\b/i.test(lastUserQuery)) {
+    const lastEntry = contents[contents.length - 1];
+    if (lastEntry?.role === "user" && Array.isArray(lastEntry.parts)) {
+      lastEntry.parts.push({
+        text: "\n[Important: Respond strictly and completely in fluent English only. Do NOT use Roman Urdu or Urdu in your reply.]"
+      });
+    }
+  }
   const wantsFreshWebInfo = req.enableSearch || req.enableDeepResearch || /\b(latest|today|current|news|price|weather|score|winner|2025|2026|right now|live)\b/i.test(lastUserQuery);
-  const modelsToTry = getPrioritizedModels(
-    isReasoning ? ["gemini-4-hydrogen", "gemini-3.1-flash-lite"] : ["gemini-3.1-flash-lite", "gemini-4-hydrogen"]
-  );
+  const modelsToTry = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
   for (const model of modelsToTry) {
     let streamedText = "";
     try {
@@ -5689,7 +5732,7 @@ ${att.extractedText}
       if (wantsFreshWebInfo) {
         modelConfig.tools = [{ googleSearch: {} }];
       }
-      const openTimeoutMs = isReasoning ? 12e3 : 6500;
+      const openTimeoutMs = isReasoning ? 12e3 : 6e3;
       const streamResult = await Promise.race([
         activeClient.models.generateContentStream({
           model,
@@ -5722,7 +5765,11 @@ ${att.extractedText}
       }
     } catch (err) {
       const errMsg = String(err?.message || err);
-      markModelExhausted(model, isTransientModelError(err) ? 18e4 : 6e4);
+      const isTimeout = errMsg.toLowerCase().includes("timeout");
+      if (!isTimeout) {
+        markModelExhausted(model, isTransientModelError(err) ? 18e4 : 6e4);
+      }
+      console.warn(`[Bexus Stream] Model ${model} failed (${errMsg})`);
       if (streamedText.trim()) {
         return { fullText: streamedText, groundingSources: [], isReasoning };
       }
@@ -5758,7 +5805,7 @@ function sanitizeAndCleanPrompt(rawPrompt) {
   const isAutomotive = /(bmw|mercedes|audi|porsche|ferrari|lamborghini|nissan|supra|gtr|car|vehicle|automobile|supercar|hypercar|bike|motorcycle|sedan|coupe|truck)/i.test(lower);
   const isDynamicMotion = /(rolling|racing|highway|speed|motion|drifting|driving|pacing|track|chase|road|drift|burnout|fast)/i.test(lower);
   const isRainOrNight = /(rain|rainy|night|wet|storm|dark|neon|midnight|puddles|mist|fog|slick)/i.test(lower);
-  const isWildlife = /(lion|tiger|leopard|cat|dog|bear|wolf|eagle|bird|horse|cheetah|animal|wildlife)/i.test(lower);
+  const isWildlife = /(lion|tiger|leopard|cat|dog|bear|wolf|eagle|bird|horse|cheetah|goat|sheep|cow|deer|elephant|monkey|rabbit|fox|panda|animal|wildlife)/i.test(lower);
   const isPortrait = /(woman|man|girl|boy|person|face|model|lady|portrait|character)/i.test(lower);
   const isCyberpunk = /(cyberpunk|sci-fi|futuristic|neon city|tokyo 2099|mecha|cyborg)/i.test(lower);
   const isArchitecture = /(building|architecture|mansion|room|cabin|interior|skyscraper|penthouse|palace|villa)/i.test(lower);
@@ -5816,7 +5863,7 @@ National Geographic documentary photography, sharp focus on eyes, individual fur
     subjectDirective = `ARCHITECTURE/SCIFI DIRECTIVE:
 Grand cinematic perspective, atmospheric fog and volumetric lighting, intricate structural textures, pristine reflections.`;
   }
-  const models = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
+  const models = getPrioritizedModels(["gemini-3.1-flash-lite", "gemini-4-hydrogen"]);
   const aiPrompt = `You are a world-class prompt engineer specializing in Midjourney V6, FLUX.1 Realism, and cinematic commercial photography.
 Original Concept: "${cleanedPrompt}"
 Requested Style: "${style || "photorealistic 8k"}"
@@ -5834,18 +5881,21 @@ TASK:
    - Crystal sharp focus on the main subject (zero cartoon distortion, zero blur on the subject)
 3. Return ONLY the enhanced prompt string. NO introductory text, NO quotes, NO markdown.`;
   if (process.env.GEMINI_API_KEY) {
+    const activeClient = getAIClient();
     for (const model of models) {
       try {
         const res = await Promise.race([
-          ai.models.generateContent({
+          activeClient.models.generateContent({
             model,
             contents: [{ role: "user", parts: [{ text: aiPrompt }] }],
             config: {
-              maxOutputTokens: 140
+              thinkingConfig: {
+                thinkingLevel: model === "gemini-4-hydrogen" ? ThinkingLevel.LOW : ThinkingLevel.MINIMAL
+              }
             }
           }),
           new Promise(
-            (_, reject) => setTimeout(() => reject(new Error("Prompt enhance timeout")), 3e3)
+            (_, reject) => setTimeout(() => reject(new Error("Prompt enhance timeout")), 3500)
           )
         ]);
         let enhanced = res.text?.trim().replace(/^["']|["']$/g, "");
@@ -5856,7 +5906,7 @@ TASK:
       } catch (err) {
         const msg = String(err?.message || err);
         if (msg.includes("API key") || msg.includes("PERMISSION_DENIED")) break;
-        if (isTransientModelError(err)) {
+        if (!msg.toLowerCase().includes("timeout") && isTransientModelError(err)) {
           markModelExhausted(model);
         }
       }
@@ -7656,12 +7706,11 @@ A screenshot was provided by the user via Ctrl+V / upload. Carefully analyze thi
     cleanTitle = cleanTitle.slice(0, 32);
   }
   const generatedHtml = generateWorldClassApp(cleanTitle, category, theme);
-  const isUrdu = /(yar|kardo|banao|hai|nhi|nahi|theek|kese|kaise|mera|kya|bhai|masla|sahi|kaam)/i.test(prompt);
   return {
     id: "app_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
     title: cleanTitle.length > 35 ? cleanTitle.slice(0, 32) + "..." : cleanTitle,
     description: `Complete customized web application tailored for "${cleanTitle}".`,
-    explanation: isUrdu ? `Ji bilkul! Maine "${cleanTitle}" ko thoroughly diagnose kar ke 100% responsive interactive UI, modern styling aur working controls ke sath update kar diya hai. Preview mein check karein!` : `I have updated and refined "${cleanTitle}" to be 100% interactive, responsive, and bug-free. You can now test it live in the preview!`,
+    explanation: `I have updated and refined "${cleanTitle}" to be 100% interactive, responsive, and bug-free. You can now test it live in the preview!`,
     html: generatedHtml,
     code: generatedHtml,
     features: [
@@ -9097,13 +9146,12 @@ app.post("/api/app/generate", async (req, res) => {
     console.error("API /api/app/generate error:", error);
     try {
       const reqPrompt = req.body?.prompt || "Interactive Web App";
-      const isUrdu = /(yar|kardo|banao|hai|nhi|nahi|theek|kese|kaise|mera|kya|bhai)/i.test(reqPrompt);
       const fallbackHtml = generateWorldClassApp(reqPrompt, "custom", req.body?.theme || "dark-luxury");
       return res.json({
         id: "app_" + Date.now(),
         title: reqPrompt.slice(0, 32) || "Interactive Web App",
         description: "Contextual web application initialized.",
-        explanation: isUrdu ? `Ji bilkul, maine application ko aapki instruction ke mutabiq synchronize kar diya hai. Preview mein check karein!` : `Application updated according to your instruction. Changes are now synchronized in the preview!`,
+        explanation: "Application updated according to your instruction. Changes are now synchronized in the preview!",
         html: fallbackHtml,
         code: fallbackHtml
       });

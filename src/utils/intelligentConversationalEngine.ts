@@ -9,6 +9,10 @@ export function cleanQuery(input: string): string {
     .trim()
     .replace(/[?!.,;:]+$/g, '')
     .toLowerCase()
+    .replace(/\b(what|how|where|who|when|which)\s+si\b/g, '$1 is')
+    .replace(/\bwat\s+(is|si)\b/g, 'what is')
+    .replace(/\bwht\s+(is|si)\b/g, 'what is')
+    .replace(/\bwhats\b|\bwhat's\b/g, 'what is')
     .replace(/\bhoy\b/g, 'how')
     .replace(/\bhw\b/g, 'how')
     .replace(/\br\b/g, 'are')
@@ -18,21 +22,28 @@ export function cleanQuery(input: string): string {
     .replace(/\bkaise\b/g, 'kese')
     .replace(/\bhaal\b/g, 'hal')
     .replace(/\bha\b/g, 'hai')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
 function tryEvaluateMathExpression(query: string): number | null {
-  const pct = query.match(/^([0-9.]+)\s*%\s*(?:of)?\s*([0-9.]+)$/);
+  let clean = query
+    .replace(/^(hello|hi|hey|bexus|ai|please|pls|can you|tell me|find|solve|calculate|eval|evaluate)\s+/gi, '')
+    .replace(/^(hello|hi|hey|bexus|ai)\s+/gi, '')
+    .replace(/^(what is|how much is|calculate|solve|eval|evaluate)\s+/i, '')
+    .replace(/\s+(equals to|equal to|equals|is what)$/i, '')
+    .trim();
+
+  const pct = clean.match(/^([0-9.]+)\s*%\s*(?:of)?\s*([0-9.]+)$/);
   if (pct) {
-    return (parseFloat(pct[1]) / 100) * parseFloat(pct[2]);
+    return Math.round(((parseFloat(pct[1]) / 100) * parseFloat(pct[2])) * 100000) / 100000;
   }
 
-  const normalized = query
-    .replace(/^(what is|calculate|solve|eval|evaluate)\s+/i, '')
-    .replace(/\bplus\b/gi, '+')
-    .replace(/\bminus\b/gi, '-')
-    .replace(/\btimes\b|\bmultiplied by\b|\binto\b/gi, '*')
-    .replace(/\bdivided by\b/gi, '/')
+  const normalized = clean
+    .replace(/\bplus\b|\badded to\b|\badd\b/gi, '+')
+    .replace(/\bminus\b|\bsubtract\b|\bless\b/gi, '-')
+    .replace(/\btimes\b|\bmultiplied by\b|\bmultiply by\b|\binto\b/gi, '*')
+    .replace(/\bdivided by\b|\bover\b/gi, '/')
     .replace(/×/g, '*')
     .replace(/÷/g, '/')
     .trim();
@@ -74,26 +85,26 @@ export function tryInstantDirectReply(
   // 1. Instant exact arithmetic
   const mathAns = tryEvaluateMathExpression(query);
   if (mathAns !== null) {
-    return isUrdu ? `Jawab hai: ${mathAns}` : `The answer is ${mathAns}.`;
+    return isUrdu ? `Jawab hai: ${mathAns}` : `The answer is **${mathAns}**.`;
   }
 
-  // 2. Strictly standalone greetings ONLY (never intercept "hello how do I fix...")
-  if (/^(how are you|how are u|how are you doing|how is it going|how do you do|whats up|what's up|wassup)$/i.test(query)) {
+  // 2. Strictly standalone greetings ONLY (never intercept "hello how do I fix..." or "hello what is...")
+  if (/^(?:(?:hello|hi|hey|hola|salam|assalam|aoa)(?:\s+bexus(?:\s+ai)?)?\s*,?\s*)?(how are you|how are you doing|how is it going|how do you do|whats up|what's up|what is up|wassup)$/i.test(query)) {
     return isUrdu
       ? 'Main bilkul theek aur zabardast hoon! Aap sunayein, kya haal chaal hain?'
-      : "I'm doing great, thank you! Ask me any question or describe any problem and I'll help solve it right away.";
+      : "Hello! I'm doing great, thank you for asking. How can I help you today?";
   }
 
-  if (/^(kese ho|kya hal|kya hal hai|sab theek|sab theek hai|kya chal raha hai)$/i.test(query)) {
+  if (/^(?:(?:hello|hi|hey|salam|assalam|aoa)\s*,?\s*)?(kese ho|kya hal|kya hal hai|sab theek|sab theek hai|kya chal raha hai)$/i.test(query)) {
     return isUrdu
       ? 'Main bilkul theek aur fresh hoon! Aap batayein, kis cheez me madad chahiye?'
-      : "I'm doing great, thank you! What question or problem can I help you solve today?";
+      : "Hello! I'm doing great, thank you! What question or problem can I help you solve today?";
   }
 
-  if (/^(hello|hi|hey|hola|hello bexus|hi bexus|hey bexus)$/i.test(query)) {
+  if (/^(hello|hi|hey|hola|hello bexus|hi bexus|hey bexus|hello bexus ai|hi bexus ai)$/i.test(query)) {
     return isUrdu
       ? 'Hello! Main Bexus AI hoon. Batayein aaj kis cheez me madad chahiye?'
-      : 'Hello! I am Bexus AI. Ask me anything—from coding and troubleshooting to science, writing, or daily problems.';
+      : 'Hello! I am Bexus AI. Ask me any question or describe any problem and I will help you solve it right away.';
   }
 
   if (/^(salam|assalam|assalam o alaikum|assalamualaikum|aoa)$/i.test(query)) {

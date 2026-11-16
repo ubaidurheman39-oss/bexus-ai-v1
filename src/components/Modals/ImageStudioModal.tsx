@@ -117,6 +117,10 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
       .replace(/\bnite\b/gi, 'night')
       .replace(/\bcarz\b/gi, 'cars')
       .replace(/\bgaari\b/gi, 'car')
+      .replace(/\bbakri\b/gi, 'goat')
+      .replace(/\bbakra\b/gi, 'goat')
+      .replace(/\bbilli\b/gi, 'cat')
+      .replace(/\bkutta\b/gi, 'dog')
       .trim();
   };
 
@@ -193,7 +197,14 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
         }),
       });
 
-      const data = await res.json();
+      let data: any = null;
+      if (res.ok) {
+        try {
+          data = await res.json();
+        } catch {
+          data = null;
+        }
+      }
       if (data && data.imageUrl) {
         const newItem: GeneratedHistoryItem = {
           id: 'img_' + Date.now(),

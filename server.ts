@@ -479,15 +479,12 @@ app.post('/api/app/generate', async (req, res) => {
     try {
       // Emergency recovery with high-speed contextual template
       const reqPrompt = req.body?.prompt || 'Interactive Web App';
-      const isUrdu = /(yar|kardo|banao|hai|nhi|nahi|theek|kese|kaise|mera|kya|bhai)/i.test(reqPrompt);
       const fallbackHtml = generateWorldClassApp(reqPrompt, 'custom', req.body?.theme || 'dark-luxury');
       return res.json({
         id: 'app_' + Date.now(),
         title: reqPrompt.slice(0, 32) || 'Interactive Web App',
         description: 'Contextual web application initialized.',
-        explanation: isUrdu
-          ? `Ji bilkul, maine application ko aapki instruction ke mutabiq synchronize kar diya hai. Preview mein check karein!`
-          : `Application updated according to your instruction. Changes are now synchronized in the preview!`,
+        explanation: 'Application updated according to your instruction. Changes are now synchronized in the preview!',
         html: fallbackHtml,
         code: fallbackHtml
       });

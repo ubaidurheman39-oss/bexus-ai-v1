@@ -59,7 +59,7 @@ import { Sidebar, SavedChat, SavedProjectItem } from './components/Sidebar';
 import { Attachment, DeepResearchReport } from './types';
 import { sounds } from './services/soundEffects';
 import { getClientDirectImageUrl } from './utils/imageFallback';
-import { generateNaturalConversationalReply } from './utils/intelligentConversationalEngine';
+import { generateNaturalConversationalReply, tryInstantDirectReply } from './utils/intelligentConversationalEngine';
 import { auth, signOut, onAuthStateChanged } from './services/firebase';
 import { DeepResearchModal } from './components/Modals/DeepResearchModal';
 import { ImageStudioModal } from './components/Modals/ImageStudioModal';
@@ -1069,7 +1069,14 @@ export default function App() {
             aspectRatio: isAutomotiveOrLandscape ? '16:9' : '1:1'
           })
         });
-        const imgData = await imgRes.json();
+        let imgData: any = {};
+        try {
+          if (imgRes.ok) {
+            imgData = await imgRes.json();
+          }
+        } catch {
+          imgData = {};
+        }
         sounds.playReceive();
         
         const directFallback = getClientDirectImageUrl(cleanPrompt, isAutomotiveOrLandscape ? 1280 : 1024);
@@ -1303,136 +1310,167 @@ export default function App() {
         const streamMsgId = 'msg_asst_' + Date.now();
         let usedStreaming = false;
 
-        try {
-          const streamRes = await fetch('/api/chat/stream', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(chatPayload),
-          });
-
-          const cType = streamRes.headers.get('content-type') || '';
-          if (streamRes.ok && cType.includes('text/event-stream') && streamRes.body) {
-            usedStreaming = true;
-            const reader = streamRes.body.getReader();
-            const decoder = new TextDecoder();
-            let sseBuffer = '';
-            let accumulatedText = '';
-            let firstTokenRevealed = false;
-
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              sseBuffer += decoder.decode(value, { stream: true });
-              const lines = sseBuffer.split('\n');
-              sseBuffer = lines.pop() || '';
-
-              for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed.startsWith('data:')) continue;
-                try {
-                  const evt = JSON.parse(trimmed.slice(5).trim());
-                  if (evt.type === 'chunk' && evt.text) {
-                    accumulatedText += evt.text;
-                    const looksUnavailable =
-                      accumulatedText.includes("I couldn't reach the live AI reasoning server") ||
-                      accumulatedText.includes('live AI connection abhi busy hai');
-                    if (!looksUnavailable) {
-                      if (!firstTokenRevealed) {
-                        firstTokenRevealed = true;
-                        setIsLoading(false);
-                      }
-                      setMessages([
-                        ...newMessages,
-                        {
-                          id: streamMsgId,
-                          role: 'assistant',
-                          content: accumulatedText,
-                          timestamp: Date.now(),
-                        }
-                      ]);
-                    }
-                  } else if (evt.type === 'done') {
-                    if (evt.fullText && evt.fullText.length > accumulatedText.length) {
-                      accumulatedText = evt.fullText;
-                    }
-                  }
-                } catch {
-                  // Ignore partial SSE JSON line
-                }
-              }
-            }
-            data = { text: accumulatedText };
+        const isUnavailableStub = (txt?: string) => {
+          const t = (txt || '').trim();
+          if (!t) return true;
+          if (t.includes("I couldn't reach the live AI reasoning server") || t.includes('live AI connection abhi busy hai')) {
+            return true;
           }
-        } catch {
-          usedStreaming = false;
-        }
+          // Reject empty generic greeting fillers when user actually asked a multi-word question/problem
+          const isQuestionOrTask = content.trim().split(/\s+/).length >= 3;
+          const isGenericFiller = /^(i'?m happy to help you with that!?|how can i help you today\??|i'?m here to help!?)\s*(how can i help you today\??)?$/i.test(t);
+          return isQuestionOrTask && isGenericFiller;
+        };
 
-        const isUnavailableStub = (txt?: string) =>
-          !txt || !txt.trim() || txt.includes("I couldn't reach the live AI reasoning server") || txt.includes('live AI connection abhi busy hai');
+        const hasAnyAttachments = newMessages.some(m => m.attachments && m.attachments.length > 0);
+        const instantClientReply = !hasAnyAttachments
+          ? tryInstantDirectReply(content, {
+              userName: chatPayload.userName,
+              lang: currentLang,
+              voiceMode: false,
+            })
+          : null;
 
-        if ((!usedStreaming || isUnavailableStub(data?.text)) && Date.now() - startTime < 5500) {
+        if (instantClientReply) {
+          data = { text: instantClientReply };
+        } else {
           try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 8500);
-            const response = await fetch('/api/chat', {
+            const streamController = new AbortController();
+            let firstTokenRevealed = false;
+            const streamOpenTimer = setTimeout(() => {
+              if (!firstTokenRevealed) {
+                streamController.abort();
+              }
+            }, isDeepSearchActive ? 14000 : 8500);
+
+            const streamRes = await fetch('/api/chat/stream', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(chatPayload),
-              signal: controller.signal,
+              signal: streamController.signal,
             });
-            clearTimeout(timer);
 
-            const contentType = response.headers.get('content-type') || '';
-            if (contentType.includes('application/json')) {
-              data = await response.json();
+            const cType = streamRes.headers.get('content-type') || '';
+            if (streamRes.ok && cType.includes('text/event-stream') && streamRes.body) {
+              usedStreaming = true;
+              const reader = streamRes.body.getReader();
+              const decoder = new TextDecoder();
+              let sseBuffer = '';
+              let accumulatedText = '';
+
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                sseBuffer += decoder.decode(value, { stream: true });
+                const lines = sseBuffer.split('\n');
+                sseBuffer = lines.pop() || '';
+
+                for (const line of lines) {
+                  const trimmed = line.trim();
+                  if (!trimmed.startsWith('data:')) continue;
+                  try {
+                    const evt = JSON.parse(trimmed.slice(5).trim());
+                    if (evt.type === 'chunk' && evt.text) {
+                      accumulatedText += evt.text;
+                      if (!isUnavailableStub(accumulatedText)) {
+                        if (!firstTokenRevealed) {
+                          firstTokenRevealed = true;
+                          clearTimeout(streamOpenTimer);
+                          setIsLoading(false);
+                        }
+                        setMessages([
+                          ...newMessages,
+                          {
+                            id: streamMsgId,
+                            role: 'assistant',
+                            content: accumulatedText,
+                            timestamp: Date.now(),
+                          }
+                        ]);
+                      }
+                    } else if (evt.type === 'done') {
+                      if (evt.fullText && evt.fullText.length > accumulatedText.length) {
+                        accumulatedText = evt.fullText;
+                      }
+                    }
+                  } catch {
+                    // Ignore partial SSE JSON line
+                  }
+                }
+              }
+              clearTimeout(streamOpenTimer);
+              data = { text: accumulatedText };
             } else {
-              const raw = await response.text();
-              try {
-                data = JSON.parse(raw);
-              } catch {
-                data = { text: '' };
-              }
+              clearTimeout(streamOpenTimer);
             }
           } catch {
-            // Proceed to browser-direct rescue
+            usedStreaming = false;
           }
-        }
 
-        if (isUnavailableStub(data?.text)) {
-          try {
-            const targetLang = currentLang && currentLang.toLowerCase() !== 'english' ? currentLang : 'English';
-            const rescueCtrl = new AbortController();
-            const rescueTimer = setTimeout(() => rescueCtrl.abort(), 8500);
-            const rescueRes = await fetch('https://text.pollinations.ai/', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                model: 'openai',
-                seed: Math.floor(Math.random() * 100000),
-                messages: [
-                  {
-                    role: 'system',
-                    content: `You are Bexus AI, a sharp, helpful problem-solving assistant. Reply strictly in clear, practical ${targetLang}. Solve the user's exact problem with concrete, helpful steps.`
-                  },
-                  ...newMessages.slice(-4).map(m => ({ role: m.role, content: m.content.slice(0, 800) }))
-                ]
-              }),
-              signal: rescueCtrl.signal,
-            });
-            clearTimeout(rescueTimer);
-            if (rescueRes.ok) {
-              const rescueText = (await rescueRes.text()).trim();
-              if (rescueText && !rescueText.startsWith('{') && rescueText.length > 15) {
-                data = { text: rescueText };
+          if ((!usedStreaming || isUnavailableStub(data?.text)) && Date.now() - startTime < 4500) {
+            try {
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 8000);
+              const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(chatPayload),
+                signal: controller.signal,
+              });
+              clearTimeout(timer);
+
+              const contentType = response.headers.get('content-type') || '';
+              if (contentType.includes('application/json')) {
+                data = await response.json();
+              } else {
+                const raw = await response.text();
+                try {
+                  data = JSON.parse(raw);
+                } catch {
+                  data = { text: '' };
+                }
               }
+            } catch {
+              // Proceed to browser-direct rescue
             }
-          } catch {
-            // Continue gracefully
           }
-        }
 
-        if (isUnavailableStub(data?.text)) {
-          throw new Error('All live AI routes temporarily busy');
+          if (isUnavailableStub(data?.text)) {
+            try {
+              const targetLang = currentLang && currentLang.toLowerCase() !== 'english' ? currentLang : 'English';
+              const rescueCtrl = new AbortController();
+              const rescueTimer = setTimeout(() => rescueCtrl.abort(), 8500);
+              const rescueRes = await fetch('https://text.pollinations.ai/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  model: 'openai',
+                  seed: Math.floor(Math.random() * 100000),
+                  messages: [
+                    {
+                      role: 'system',
+                      content: `You are Bexus AI, a sharp, helpful problem-solving assistant. Reply strictly in clear, practical ${targetLang}. Directly answer or solve the user's latest question.`
+                    },
+                    { role: 'user', content: content.slice(0, 1200) }
+                  ]
+                }),
+                signal: rescueCtrl.signal,
+              });
+              clearTimeout(rescueTimer);
+              if (rescueRes.ok) {
+                const rescueText = (await rescueRes.text()).trim();
+                if (rescueText && !rescueText.startsWith('{') && !isUnavailableStub(rescueText)) {
+                  data = { text: rescueText };
+                }
+              }
+            } catch {
+              // Continue gracefully
+            }
+          }
+
+          if (isUnavailableStub(data?.text)) {
+            throw new Error('All live AI routes temporarily busy');
+          }
         }
 
         sounds.playReceive();
