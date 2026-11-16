@@ -5107,18 +5107,25 @@ function cleanQuery(input) {
   return (input || "").trim().replace(/[?!.,;:]+$/g, "").toLowerCase().replace(/\b(what|how|where|who|when|which)\s+si\b/g, "$1 is").replace(/\bwat\s+(is|si)\b/g, "what is").replace(/\bwht\s+(is|si)\b/g, "what is").replace(/\bwhats\b|\bwhat's\b/g, "what is").replace(/\bhoy\b/g, "how").replace(/\bhw\b/g, "how").replace(/\br\b/g, "are").replace(/\bu\b/g, "you").replace(/\bur\b/g, "your").replace(/\bkesy\b/g, "kese").replace(/\bkaise\b/g, "kese").replace(/\bhaal\b/g, "hal").replace(/\bha\b/g, "hai").replace(/\s+/g, " ").trim();
 }
 function tryEvaluateMathExpression(query) {
-  let clean = query.replace(/^(hello|hi|hey|bexus|ai|please|pls|can you|tell me|find|solve|calculate|eval|evaluate)\s+/gi, "").replace(/^(hello|hi|hey|bexus|ai)\s+/gi, "").replace(/^(what is|how much is|calculate|solve|eval|evaluate)\s+/i, "").replace(/\s+(equals to|equal to|equals|is what)$/i, "").trim();
+  let clean = query.replace(/^(hello|hi|hey|bexus|ai|please|pls|can you|tell me|find|solve|calculate|eval|evaluate)\s+/gi, "").replace(/^(hello|hi|hey|bexus|ai)\s+/gi, "").replace(/^(what is|how much is|calculate|solve|eval|evaluate)\s+/i, "").replace(/\s+(equals to|equal to|equals|is what|please|batao|karo)$/i, "").trim();
   const pct = clean.match(/^([0-9.]+)\s*%\s*(?:of)?\s*([0-9.]+)$/);
   if (pct) {
-    return Math.round(parseFloat(pct[1]) / 100 * parseFloat(pct[2]) * 1e5) / 1e5;
+    return Number((parseFloat(pct[1]) / 100 * parseFloat(pct[2])).toFixed(8));
   }
-  const normalized = clean.replace(/\bplus\b|\badded to\b|\badd\b/gi, "+").replace(/\bminus\b|\bsubtract\b|\bless\b/gi, "-").replace(/\btimes\b|\bmultiplied by\b|\bmultiply by\b|\binto\b/gi, "*").replace(/\bdivided by\b|\bover\b/gi, "/").replace(/×/g, "*").replace(/÷/g, "/").trim();
+  const sqrtMatch = clean.match(/^(?:square root of|under root of|under root|sqrt)\s*\(?\s*([0-9.]+)\s*\)?$/i);
+  if (sqrtMatch) {
+    const n = parseFloat(sqrtMatch[1]);
+    if (Number.isFinite(n) && n >= 0) {
+      return Number(Math.sqrt(n).toFixed(8));
+    }
+  }
+  const normalized = clean.replace(/\b(plus|added to|add|jama)\b/gi, "+").replace(/\b(minus|subtract|less|manfi)\b/gi, "-").replace(/\b(times|multiplied by|multiply by|multiply|into|zarb)\b/gi, "*").replace(/\b(divided by|divide by|divided|divide|taqseem|over)\b/gi, "/").replace(/\b(?:to the )?power(?: of)?\b/gi, "**").replace(/\^/g, "**").replace(/(\d(?:\.\d+)?)\s*[x×]\s*(\d(?:\.\d+)?)/gi, "$1 * $2").replace(/×/g, "*").replace(/÷/g, "/").trim();
   if (!/^[0-9+\-*/().\s]+$/.test(normalized)) return null;
   if (!/[0-9]/.test(normalized) || !/[+\-*/]/.test(normalized)) return null;
   try {
     const val = Function(`"use strict"; return (${normalized});`)();
     if (typeof val === "number" && Number.isFinite(val)) {
-      return Math.round(val * 1e5) / 1e5;
+      return Number(val.toFixed(8));
     }
   } catch {
     return null;
@@ -5562,7 +5569,7 @@ ${att.extractedText}
           thinkingLevel: ThinkingLevel.MINIMAL
         };
       }
-      const timeoutMs = isReasoning || wantsFreshWebInfo ? 12e3 : 6e3;
+      const timeoutMs = isReasoning || wantsFreshWebInfo ? 24e3 : 16e3;
       let response;
       try {
         response = await Promise.race([
@@ -5732,7 +5739,7 @@ ${att.extractedText}
       if (wantsFreshWebInfo) {
         modelConfig.tools = [{ googleSearch: {} }];
       }
-      const openTimeoutMs = isReasoning ? 12e3 : 6e3;
+      const openTimeoutMs = isReasoning ? 24e3 : 16e3;
       const streamResult = await Promise.race([
         activeClient.models.generateContentStream({
           model,

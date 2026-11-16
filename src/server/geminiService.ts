@@ -521,7 +521,7 @@ The user is browsing as an anonymous guest (no account signed in).
         };
       }
 
-      const timeoutMs = isReasoning || wantsFreshWebInfo ? 12000 : 6000;
+      const timeoutMs = isReasoning || wantsFreshWebInfo ? 24000 : 16000;
 
       let response: any;
       try {
@@ -730,7 +730,7 @@ ${req.customInstructions ? `\nCustom Instructions: ${req.customInstructions}` : 
         modelConfig.tools = [{ googleSearch: {} }];
       }
 
-      const openTimeoutMs = isReasoning ? 12000 : 6000;
+      const openTimeoutMs = isReasoning ? 24000 : 16000;
       const streamResult = await Promise.race([
         activeClient.models.generateContentStream({
           model,

@@ -1341,7 +1341,7 @@ export default function App() {
               if (!firstTokenRevealed) {
                 streamController.abort();
               }
-            }, isDeepSearchActive ? 14000 : 8500);
+            }, isDeepSearchActive ? 25000 : 18000);
 
             const streamRes = await fetch('/api/chat/stream', {
               method: 'POST',

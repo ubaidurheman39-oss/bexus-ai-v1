@@ -31,31 +31,42 @@ function tryEvaluateMathExpression(query: string): number | null {
     .replace(/^(hello|hi|hey|bexus|ai|please|pls|can you|tell me|find|solve|calculate|eval|evaluate)\s+/gi, '')
     .replace(/^(hello|hi|hey|bexus|ai)\s+/gi, '')
     .replace(/^(what is|how much is|calculate|solve|eval|evaluate)\s+/i, '')
-    .replace(/\s+(equals to|equal to|equals|is what)$/i, '')
+    .replace(/\s+(equals to|equal to|equals|is what|please|batao|karo)$/i, '')
     .trim();
 
   const pct = clean.match(/^([0-9.]+)\s*%\s*(?:of)?\s*([0-9.]+)$/);
   if (pct) {
-    return Math.round(((parseFloat(pct[1]) / 100) * parseFloat(pct[2])) * 100000) / 100000;
+    return Number((((parseFloat(pct[1]) / 100) * parseFloat(pct[2]))).toFixed(8));
+  }
+
+  const sqrtMatch = clean.match(/^(?:square root of|under root of|under root|sqrt)\s*\(?\s*([0-9.]+)\s*\)?$/i);
+  if (sqrtMatch) {
+    const n = parseFloat(sqrtMatch[1]);
+    if (Number.isFinite(n) && n >= 0) {
+      return Number(Math.sqrt(n).toFixed(8));
+    }
   }
 
   const normalized = clean
-    .replace(/\bplus\b|\badded to\b|\badd\b/gi, '+')
-    .replace(/\bminus\b|\bsubtract\b|\bless\b/gi, '-')
-    .replace(/\btimes\b|\bmultiplied by\b|\bmultiply by\b|\binto\b/gi, '*')
-    .replace(/\bdivided by\b|\bover\b/gi, '/')
+    .replace(/\b(plus|added to|add|jama)\b/gi, '+')
+    .replace(/\b(minus|subtract|less|manfi)\b/gi, '-')
+    .replace(/\b(times|multiplied by|multiply by|multiply|into|zarb)\b/gi, '*')
+    .replace(/\b(divided by|divide by|divided|divide|taqseem|over)\b/gi, '/')
+    .replace(/\b(?:to the )?power(?: of)?\b/gi, '**')
+    .replace(/\^/g, '**')
+    .replace(/(\d(?:\.\d+)?)\s*[x×]\s*(\d(?:\.\d+)?)/gi, '$1 * $2')
     .replace(/×/g, '*')
     .replace(/÷/g, '/')
     .trim();
 
-  // Safe arithmetic evaluator: only digits, whitespace, parentheses, decimal points, and + - * /
+  // Safe arithmetic evaluator: only digits, whitespace, parentheses, decimal points, and + - * / **
   if (!/^[0-9+\-*/().\s]+$/.test(normalized)) return null;
   if (!/[0-9]/.test(normalized) || !/[+\-*/]/.test(normalized)) return null;
 
   try {
     const val = Function(`"use strict"; return (${normalized});`)();
     if (typeof val === 'number' && Number.isFinite(val)) {
-      return Math.round(val * 100000) / 100000;
+      return Number(val.toFixed(8));
     }
   } catch {
     return null;
