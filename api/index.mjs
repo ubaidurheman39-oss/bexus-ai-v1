@@ -5214,13 +5214,19 @@ function getAIClient() {
 var ai = getAIClient();
 async function fetchInstantWebKnowledge(query) {
   const raw = (query || "").trim();
-  const isTroubleshootingOrPersonal = /\b(i have|my |not working|stopped working|broken|won't|wont|doesn't|doesnt|can't|cant|fix|solve|issue|problem|error|bug|help me|months? ago|days? ago|years? ago|charging|turn on)\b/i.test(raw);
-  const isFactualQuestion = /^(what is|what are|who is|who was|where is|explain|tell me about|define|meaning of|capital of|history of)\b/i.test(raw) || raw.split(/\s+/).length <= 3;
-  if (isTroubleshootingOrPersonal || !isFactualQuestion) {
+  const isNonDefinitional = /\b(i have|my |not working|stopped working|broken|won't|wont|doesn't|doesnt|can't|cant|fix|solve|issue|problem|error|bug|help me|months? ago|days? ago|years? ago|charging|turn on|why is|why are|why does|how do|how to|compare|difference|sentences?)\b/i.test(raw);
+  const isFactualTopic = /^(what is|what are|who is|who was|where is|define|meaning of|capital of)\b/i.test(raw);
+  if (isNonDefinitional || !isFactualTopic) {
     return null;
   }
-  const cleanQ = raw.replace(/^(what is|what are|who is|who was|where is|explain|tell me about|define|meaning of|history of)\s+/i, "").replace(/[?!.]+$/g, "").trim();
+  const cleanQ = raw.replace(/^(what is|what are|who is|who was|where is|define|meaning of)\s+(?:a |an |the )?/i, "").replace(/[?!.]+$/g, "").trim();
   if (!cleanQ || cleanQ.length < 2) return null;
+  const coreWords = cleanQ.toLowerCase().split(/\s+/).filter((w) => w.length >= 3 && !["the", "and", "for", "with", "from", "about", "what", "capital"].includes(w));
+  const isRelevantText = (title, body) => {
+    if (coreWords.length === 0) return true;
+    const hay = `${title} ${body}`.toLowerCase();
+    return coreWords.every((w) => hay.includes(w));
+  };
   try {
     const [ddgRes, wikiSearchRes] = await Promise.allSettled([
       fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(cleanQ)}&format=json&no_html=1&skip_disambig=1`, {
@@ -5233,7 +5239,7 @@ async function fetchInstantWebKnowledge(query) {
     if (ddgRes.status === "fulfilled" && ddgRes.value) {
       const ddg = ddgRes.value;
       const abstractText = (ddg.AbstractText || ddg.Answer || "").trim();
-      if (abstractText.length > 40) {
+      if (abstractText.length > 40 && isRelevantText(ddg.Heading || "", abstractText)) {
         return abstractText;
       }
     }
@@ -5245,7 +5251,7 @@ async function fetchInstantWebKnowledge(query) {
       if (sumRes.ok) {
         const sumData = await sumRes.json();
         const extract = (sumData?.extract || "").trim();
-        if (extract.length > 40 && sumData?.type !== "disambiguation") {
+        if (extract.length > 40 && sumData?.type !== "disambiguation" && isRelevantText(topTitle, extract)) {
           return extract;
         }
       }
