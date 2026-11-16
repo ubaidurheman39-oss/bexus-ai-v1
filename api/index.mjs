@@ -5427,13 +5427,8 @@ HUMAN-LIKE NATURAL CONVERSATION & EMPATHY:
 - When the user expresses frustration, gives feedback, or speaks informally (e.g. "yar isko theek karo", "nakli ai ki tarah mat bolo", "tension ho rahi hai"), relate to them directly with understanding, acknowledge what they meant, and give real, thoughtful, helpful answers.
 - Never use robotic pre-scripted canned lists unless specifically asked for feature breakdowns.
 
-LANGUAGE & TONE:
-1. DEFAULT STRICT ENGLISH-ONLY RESPONSE POLICY:
-   - By default, you must ALWAYS communicate and respond in ENGLISH ONLY.
-   - Even if the user writes in Roman Urdu (e.g. "yar", "kaise ho", "kya haal hai", "mujhe batao", "isko full professional kardo", "aisi baat hai", "banao"), Urdu script (\u0627\u0631\u062F\u0648), Hindi, or any regional slang/dialect:
-     * Understand their intent, emotion, context, and requests with 100% precision.
-     * BUT ALWAYS reply, explain, assist, greet, and converse strictly and exclusively in clear, natural, highly intelligent, and polished ENGLISH.
-   ${req.preferredLanguage && req.preferredLanguage.toLowerCase() !== "english" ? `- EXPLICIT USER LANGUAGE OVERRIDE: The user has explicitly asked you to speak/respond in ${req.preferredLanguage}. From this turn onwards, communicate, answer, and speak in fluent, natural ${req.preferredLanguage}.` : `- Never output Roman Urdu, Urdu, or other languages unless the user explicitly requests to speak in that language.`}
+LANGUAGE & TONE (DYNAMIC LANGUAGE MATCHING):
+- Always reply, converse, explain, and answer in the exact same language and script that the user used in their latest message (e.g. if they write in Roman Urdu, Urdu, or Hindi, reply naturally in Roman Urdu / Urdu; if they write in English, reply in English). Never force English or insert unsolicited canned greetings when the user writes in Urdu or Roman Urdu.
 
 CRITICAL USER RETENTION & HEARTFELT RECOVERY DIRECTIVE:
 When the user expresses defeat, exhaustion, frustration, or quitting (e.g., "yar ma tum sa kabhi bhi baat nahi karga", "mana haar maan li ha", "bas ya safar yahn tak hi tha", "kuch sahi kaam nahi kar raha", "chhod raha hoon", "bye"):
@@ -5558,16 +5553,6 @@ ${att.extractedText}
       parts: [{ text: "Hello" }]
     });
   }
-  const isStrictEnglishDefault = !req.preferredLanguage || req.preferredLanguage.toLowerCase() === "english";
-  const lastUserRaw = req.messages[req.messages.length - 1]?.content?.trim() || "";
-  if (isStrictEnglishDefault && /\b(yar|yaar|kya|kaise|kese|karo|karoon|batao|banao|hai|hain|mera|meri|mujhe|nahi|nhi|theek|masla|gaya|chahiye|koi)\b/i.test(lastUserRaw)) {
-    const lastEntry = contents[contents.length - 1];
-    if (lastEntry?.role === "user" && Array.isArray(lastEntry.parts)) {
-      lastEntry.parts.push({
-        text: "\n[Important: Respond strictly and completely in fluent English only. Do NOT use Roman Urdu or Urdu in your reply.]"
-      });
-    }
-  }
   const lastUserQuery = req.messages[req.messages.length - 1]?.content?.trim() || "";
   const wantsFreshWebInfo = req.enableSearch || isDeepResearch || /\b(latest|today|current|news|price|weather|score|winner|2025|2026|right now|live)\b/i.test(lastUserQuery);
   const baseConfig = {
@@ -5647,27 +5632,6 @@ ${att.extractedText}
       if (!text && !response.candidates?.[0]) {
         throw new Error(`Empty response from model ${model}`);
       }
-      if (isStrictEnglishDefault) {
-        const romanMatches = text.match(/\b(yaar|yar|aap|karo|karen|hai|hain|mein|nahi|nhi|toh|gaya|hota|raha|batao|theek)\b/gi) || [];
-        if (romanMatches.length >= 3) {
-          try {
-            const rewriteRes = await Promise.race([
-              activeClient.models.generateContent({
-                model: "gemini-3.1-flash-lite",
-                contents: [{ role: "user", parts: [{ text: `Translate and rewrite the following assistant answer into clear, natural English only, preserving all helpful technical details:
-
-${text}` }] }],
-                config: { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } }
-              }),
-              new Promise((_, reject) => setTimeout(() => reject(new Error("Rewrite timeout")), 3500))
-            ]);
-            if (rewriteRes.text?.trim()) {
-              text = rewriteRes.text.trim();
-            }
-          } catch {
-          }
-        }
-      }
       if (req.userName && req.userName.trim() && req.userName.trim().toLowerCase() !== "user" && req.userName.trim().toLowerCase() !== "guest explorer") {
         const targetName = req.userName.trim();
         if (!targetName.toLowerCase().includes("ubaid")) {
@@ -5736,8 +5700,8 @@ async function generateChatResponseStream(req, onChunk) {
   const targetLang = req.preferredLanguage && req.preferredLanguage.toLowerCase() !== "english" ? req.preferredLanguage : "English";
   const systemInstruction = `You are Bexus AI, a sharp, deeply intelligent, empathetic, and helpful AI assistant powered by Gemini.
 - Communicate naturally like a world-class senior engineer and thoughtful partner.
-- Match the user's conversational opening naturally (for example, if they ask "how are you" without saying "hello", reply directly and warmly without forcing "Hello!").
-- By default reply strictly in clear, natural ${targetLang} (even if the user writes in Roman Urdu/Hindi, understand 100% accurately and respond in crisp ${targetLang} unless they explicitly request another language).
+- DYNAMIC LANGUAGE MATCHING: Always reply, converse, and answer in the exact same language/script that the user used in their latest message (if they write in Roman Urdu or Urdu, reply in Roman Urdu/Urdu; if they write in English, reply in English).
+- Match the user's conversational opening naturally without forcing generic greetings unless greeted first.
 - Solve ANY problem completely, accurately, and practically with clear steps, code blocks (single runnable HTML/JS block if building a web UI), or thorough explanations.
 - Never deflect with questionnaires when the user asks you to fix or build something.
 ${req.customInstructions ? `
@@ -5765,14 +5729,6 @@ ${att.extractedText}
   }
   if (contents.length === 0) {
     contents.push({ role: "user", parts: [{ text: "Hello" }] });
-  }
-  if ((!req.preferredLanguage || req.preferredLanguage.toLowerCase() === "english") && /\b(yar|yaar|kya|kaise|kese|karo|karoon|batao|banao|hai|hain|mera|meri|mujhe|nahi|nhi|theek|masla|gaya|chahiye|koi)\b/i.test(lastUserQuery)) {
-    const lastEntry = contents[contents.length - 1];
-    if (lastEntry?.role === "user" && Array.isArray(lastEntry.parts)) {
-      lastEntry.parts.push({
-        text: "\n[Important: Respond strictly and completely in fluent English only. Do NOT use Roman Urdu or Urdu in your reply.]"
-      });
-    }
   }
   const wantsFreshWebInfo = req.enableSearch || req.enableDeepResearch || /\b(latest|today|current|news|price|weather|score|winner|2025|2026|right now|live)\b/i.test(lastUserQuery);
   const modelsToTry = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
