@@ -124,8 +124,14 @@ export function tryInstantDirectReply(
       : 'Hello! Bexus AI is ready. What question or problem can I help you with today?';
   }
 
-  if (/^(thank you|thanks|thank u|shukriya|bohat shukriya|dhanyawad)$/i.test(query)) {
-    return isUrdu ? 'Bohat shukriya! Mujhe aapki madad karke hamesha khushi hoti hai.' : "You're very welcome! Happy to help anytime.";
+  if (
+    !/\?/.test(rawQuery) &&
+    !/\b(how|what|why|when|where|which|who|solve|write|fix|create|make|can you|could you|please|explain|tell me)\b/i.test(query) &&
+    /^(?:(?:many |so )?(?:thank you|thanks|thank u|thx|ty|shukriya|bohat shukriya|dhanyawad|appreciate(?: it)?)(?:\s+(?:so much|very much|a lot|bhai|bro|yar|yaar|bexus|ai|for|your|the|advice|help|support|answer|reply|guidance|time))*)$/i.test(query)
+  ) {
+    return isUrdu
+      ? 'Bohat shukriya! Mujhe aapki madad karke hamesha khushi hoti hai.'
+      : "You're very welcome! Glad I could help — feel free to ask anytime you need anything else.";
   }
 
   if (/^(ok|okay|theek hai|thek ha|good|great|nice|cool|zabardast|sahi|achha|acha)$/i.test(query)) {

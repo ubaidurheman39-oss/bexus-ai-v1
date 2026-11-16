@@ -5153,8 +5153,8 @@ function tryInstantDirectReply(rawQuery, options) {
   if (/^(salam|assalam|assalam o alaikum|assalamualaikum|aoa)$/i.test(query)) {
     return isUrdu ? "Walaikum Assalam! Bexus AI hazir hai, batayein aaj kya discuss ya solve karein?" : "Hello! Bexus AI is ready. What question or problem can I help you with today?";
   }
-  if (/^(thank you|thanks|thank u|shukriya|bohat shukriya|dhanyawad)$/i.test(query)) {
-    return isUrdu ? "Bohat shukriya! Mujhe aapki madad karke hamesha khushi hoti hai." : "You're very welcome! Happy to help anytime.";
+  if (!/\?/.test(rawQuery) && !/\b(how|what|why|when|where|which|who|solve|write|fix|create|make|can you|could you|please|explain|tell me)\b/i.test(query) && /^(?:(?:many |so )?(?:thank you|thanks|thank u|thx|ty|shukriya|bohat shukriya|dhanyawad|appreciate(?: it)?)(?:\s+(?:so much|very much|a lot|bhai|bro|yar|yaar|bexus|ai|for|your|the|advice|help|support|answer|reply|guidance|time))*)$/i.test(query)) {
+    return isUrdu ? "Bohat shukriya! Mujhe aapki madad karke hamesha khushi hoti hai." : "You're very welcome! Glad I could help \u2014 feel free to ask anytime you need anything else.";
   }
   if (/^(ok|okay|theek hai|thek ha|good|great|nice|cool|zabardast|sahi|achha|acha)$/i.test(query)) {
     return isUrdu ? "Theek hai! Aage batayein kya karna hai?" : "Got it! What would you like me to help you with next?";
@@ -5261,14 +5261,24 @@ async function fetchInstantWebKnowledge(query) {
   return null;
 }
 function cleanOpenLlmOutput(raw) {
-  let out = (raw || "").replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<think>[\s\S]*$/gi, "").replace(/<\/?think>/gi, "").replace(/<\|(?:im_end|eot_id|im_start|endoftext)\|>/gi, "").replace(/<\/s>/gi, "").trim();
-  if (/^here['’]?s a thinking process:/i.test(out)) {
-    const paragraphs = out.split(/\n{2,}/).filter((p) => !/^(here['’]?s a thinking process:|1\.\s*\*\*analyze|-\s*\*\*user|-\s*\*\*goal|-\s*\*\*constraint)/i.test(p.trim()));
-    if (paragraphs.length > 0) {
+  let out = (raw || "").replace(/<(?:think|thought|reasoning)>[\s\S]*?<\/(?:think|thought|reasoning)>/gi, "").replace(/<(?:think|thought|reasoning)>[\s\S]*$/gi, "").replace(/<\/?(?:think|thought|reasoning)>/gi, "").replace(/<\|(?:thought|im_end|eot_id|im_start|endoftext)\|>/gi, "").replace(/<\/s>/gi, "").trim();
+  const hasMetaReasoning = /(?:^|\n)\s*(?:here['’]?s a )?(?:thinking process|analyze the request|identify constraints|determine response strategy|mental refinement|formulate response|draft response)\b/i.test(out) || /\/no_think\s+directive/i.test(out);
+  if (hasMetaReasoning) {
+    const draftMatch = out.match(/(?:draft response(?:\s*\([^)]*\))?|final response|final answer|actual response|revised response)\s*:?\s*\*{0,2}\s*\n+([\s\S]+)$/i);
+    if (draftMatch && draftMatch[1]) {
+      out = draftMatch[1].trim();
+    } else {
+      const paragraphs = out.split(/\n{2,}/).filter(
+        (p) => !/^\s*(?:\d+\.\s*)?\*{0,2}(?:here['’]?s a thinking process|thinking process|analyze the request|identify constraints|determine response strategy|user input|goal|constraints|tone|mental refinement)\b/i.test(p.trim()) && !/^(?:-\s+|\*\s+)(?:I am "Bexus AI"|Directly answer|100% natural English|\/no_think|Never reply with vague|Avoid fluff|Keep it professional|Acknowledge the)/i.test(p.trim())
+      );
       out = paragraphs.join("\n\n").trim();
     }
   }
-  return out.replace(/^(Assistant:|Bexus AI:)\s*/i, "").replace(/\n(?:User|Human):[\s\S]*$/i, "").trim();
+  out = out.replace(/^(Assistant:|Bexus AI:)\s*/i, "").replace(/\n(?:User|Human):[\s\S]*$/i, "").trim();
+  if (/(?:identify constraints|determine response strategy|\/no_think\s+directive|mental refinement)/i.test(out)) {
+    return "";
+  }
+  return out;
 }
 var cachedFastHordeModels = {
   models: [],
@@ -5284,9 +5294,12 @@ async function getFastNonThinkingHordeModels() {
     });
     if (res.ok) {
       const list = await res.json();
-      const filtered = list.filter(
-        (m) => m?.count >= 2 && (m?.queued ?? 99) <= 2 && !/think|r1|qwen3|reason/i.test(String(m?.name || "")) && !/270m|1b|30b|31b|32b|70b|72b|120b/i.test(String(m?.name || ""))
-      ).sort((a, b) => (b.performance || 0) - (a.performance || 0)).slice(0, 6).map((m) => String(m.name));
+      const nonThinking = list.filter(
+        (m) => m?.count >= 1 && (m?.queued ?? 99) <= 2 && !/think|r1|qwen|g4-|gemma-4|meromero|orthia|reason|cot|rwkv|debug/i.test(String(m?.name || "")) && !/270m|0\.6b|0\.8b|1b|1\.7b|30b|31b|32b|70b|72b|120b/i.test(String(m?.name || ""))
+      );
+      const preferred = nonThinking.filter((m) => !/heretic|uncensored/i.test(String(m?.name || "")));
+      const pool = preferred.length > 0 ? preferred : nonThinking;
+      const filtered = pool.sort((a, b) => (b.count >= 2 ? 1 : 0) - (a.count >= 2 ? 1 : 0) || (b.performance || 0) - (a.performance || 0)).slice(0, 6).map((m) => String(m.name));
       if (filtered.length > 0) {
         cachedFastHordeModels = { models: filtered, expiresAt: Date.now() + 18e4 };
         return filtered;
@@ -5301,8 +5314,7 @@ async function runAiHordeTextSolver(messages, preferredLanguage, budgetMs = 15e3
     const targetLang = preferredLanguage && preferredLanguage.toLowerCase() !== "english" ? preferredLanguage : "English";
     const lastUserMsg = [...messages].reverse().find((m) => m.role !== "assistant")?.content?.slice(0, 900) || "";
     const prevContext = messages.length > 1 ? messages.slice(-3, -1).map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content.slice(0, 220)}`).join("\n") + "\n" : "";
-    const systemContent = `You are Bexus AI, an expert problem-solving assistant. Directly answer or solve the user's question accurately, concisely, and completely in clear ${targetLang}. ${targetLang === "English" ? "Write 100% in natural English ONLY (no Roman Urdu/Hindi)." : ""} Give exact math, clean code blocks when asked for code, and clear structured explanations. Never reply with vague greetings like "I'm happy to help you with that".
-/no_think`;
+    const systemContent = `You are Bexus AI, a helpful and knowledgeable assistant. Answer directly, accurately, and concisely in ${targetLang}.`;
     const prompt = `<|im_start|>system
 ${systemContent}<|im_end|>
 <|im_start|>user
