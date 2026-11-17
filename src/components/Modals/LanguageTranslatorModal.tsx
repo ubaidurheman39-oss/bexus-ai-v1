@@ -530,25 +530,6 @@ export const LanguageTranslatorModal: React.FC<LanguageTranslatorModalProps> = (
               </div>
             </div>
           </div>
-
-          {/* Quick Preset Phrases */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none pt-0.5">
-            <span className="text-[9px] text-zinc-500 uppercase tracking-wider font-semibold shrink-0">
-              Quick Samples:
-            </span>
-            {PRESET_PHRASES.map((phrase, idx) => (
-              <button
-                key={idx}
-                onClick={() => {
-                  setInputText(phrase.text);
-                  handleTranslate(phrase.text);
-                }}
-                className="px-2 py-0.5 rounded-lg bg-white/[0.04] hover:bg-teal-500/20 hover:border-teal-500/40 border border-white/[0.06] text-zinc-300 hover:text-teal-200 text-[11px] shrink-0 transition-colors cursor-pointer"
-              >
-                {phrase.label}
-              </button>
-            ))}
-          </div>
         </div>
       </motion.div>
     </div>

@@ -2778,8 +2778,29 @@ ${text.trim()}
     }
   }
 
-  // Fallback with cultural correction
-  try {
+    try {
+      const pollRes = await fetch('https://text.pollinations.ai/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'openai',
+          messages: [
+            { role: 'system', content: `You are a professional master translator. Translate the given text from ${srcName} to ${tgtName} with ${tone} tone. Return ONLY the translated text.` },
+            { role: 'user', content: text.trim() }
+          ]
+        }),
+        signal: AbortSignal.timeout(4000)
+      });
+      if (pollRes.ok) {
+        const txt = (await pollRes.text()).trim();
+        if (txt && !txt.startsWith('{') && txt.length > 1) {
+          return { translatedText: txt };
+        }
+      }
+    } catch {}
+
+    // Fallback with cultural correction
+    try {
     const cleanSource = sourceLang === 'ur-roman' ? 'ur' : sourceLang;
     const cleanTarget = targetLang === 'ur-roman' ? 'ur' : targetLang;
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(cleanSource)}&tl=${encodeURIComponent(cleanTarget)}&dt=t&q=${encodeURIComponent(text.trim())}`;

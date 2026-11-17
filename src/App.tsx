@@ -2716,17 +2716,7 @@ export default function App() {
                     </AnimatePresence>
                   </div>
 
-                  {/* Mic */}
-                  <button
-                    type="button"
-                    onClick={toggleMic}
-                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                      isListening ? 'text-rose-400 animate-pulse bg-rose-500/20' : 'text-neutral-400 hover:text-purple-300 hover:bg-white/[0.04]'
-                    }`}
-                    title={isListening ? 'Stop listening' : 'Voice input'}
-                  >
-                    {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                  </button>
+
 
                   {/* Deep Search Toggle */}
                   <button
@@ -2747,32 +2737,7 @@ export default function App() {
                     {isDeepSearchActive && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />}
                   </button>
 
-                  {/* Sound / Voice Output Toggle Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      sounds.playClick();
-                      if (speakingMsgId) {
-                        window.speechSynthesis?.cancel();
-                        setSpeakingMsgId(null);
-                      }
-                      setIsAutoSpeakEnabled(!isAutoSpeakEnabled);
-                    }}
-                    className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer border ${
-                      isAutoSpeakEnabled
-                        ? 'bg-purple-500/25 text-purple-300 border-purple-500/50 shadow-[0_0_10px_rgba(168,85,247,0.35)]'
-                        : 'text-neutral-400 hover:text-purple-300 hover:bg-white/[0.04] border-transparent'
-                    }`}
-                    title={isAutoSpeakEnabled ? 'Voice Output ON (AI will speak answers aloud)' : 'Voice Output OFF (Click to turn ON)'}
-                  >
-                    {isAutoSpeakEnabled ? (
-                      <Volume2 className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
-                    ) : (
-                      <VolumeX className="w-3.5 h-3.5" />
-                    )}
-                    <span className="hidden sm:inline">{isAutoSpeakEnabled ? 'Sound ON' : 'Sound OFF'}</span>
-                    {isAutoSpeakEnabled && <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />}
-                  </button>
+
                 </div>
 
                 {/* Right Controls: Send Button */}

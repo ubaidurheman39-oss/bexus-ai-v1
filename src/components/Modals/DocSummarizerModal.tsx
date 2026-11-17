@@ -304,53 +304,6 @@ export const DocSummarizerModal: React.FC<DocSummarizerModalProps> = ({
             </label>
           </div>
 
-          {/* Document Analytics & Compression Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-white/[0.06] flex items-center gap-2.5">
-              <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400">
-                <AlignLeft className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-[10px] uppercase font-bold text-zinc-500">Source Length</div>
-                <div className="text-xs font-bold text-white">{stats.srcWords} words ({stats.srcChars.toLocaleString()} chars)</div>
-              </div>
-            </div>
-
-            <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-white/[0.06] flex items-center gap-2.5">
-              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
-                <TrendingUp className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-[10px] uppercase font-bold text-zinc-500">Compression</div>
-                <div className="text-xs font-bold text-emerald-400">
-                  {stats.compression > 0 ? `-${stats.compression}% Condensed` : 'Ready'}
-                </div>
-              </div>
-            </div>
-
-            <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-white/[0.06] flex items-center gap-2.5">
-              <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400">
-                <Clock className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-[10px] uppercase font-bold text-zinc-500">Reading Time Saved</div>
-                <div className="text-xs font-bold text-cyan-400">
-                  {stats.savedTimeMin > 0 ? `~${stats.savedTimeMin} min saved` : 'Instant'}
-                </div>
-              </div>
-            </div>
-
-            <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-white/[0.06] flex items-center gap-2.5">
-              <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
-                <ShieldCheck className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-[10px] uppercase font-bold text-zinc-500">Precision Integrity</div>
-                <div className="text-xs font-bold text-purple-400">100% Factual</div>
-              </div>
-            </div>
-          </div>
-
           {/* Dual Panels */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Input Document Panel */}
