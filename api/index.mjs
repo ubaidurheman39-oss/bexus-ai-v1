@@ -5561,7 +5561,7 @@ ${att.extractedText}
   if (wantsFreshWebInfo) {
     baseConfig.tools = [{ googleSearch: {} }];
   }
-  const baseModels = ["gemini-4-hydrogen", "gemini-3.1-flash-lite"];
+  const baseModels = ["gemini-3.1-flash-lite", "gemini-4-hydrogen"];
   const modelsToTry = getPrioritizedModels(baseModels);
   const activeClient = getAIClient();
   const instantReply = tryInstantDirectReply(lastUserQuery, {
@@ -5590,7 +5590,7 @@ ${att.extractedText}
       const modelConfig = { ...baseConfig };
       if (model === "gemini-4-hydrogen") {
         modelConfig.thinkingConfig = {
-          thinkingLevel: isReasoning ? ThinkingLevel.HIGH : ThinkingLevel.LOW
+          thinkingLevel: isReasoning ? ThinkingLevel.HIGH : ThinkingLevel.MINIMAL
         };
       } else if (model === "gemini-3.1-flash-lite") {
         modelConfig.thinkingConfig = {
@@ -5731,14 +5731,14 @@ ${att.extractedText}
     contents.push({ role: "user", parts: [{ text: "Hello" }] });
   }
   const wantsFreshWebInfo = req.enableSearch || req.enableDeepResearch || /\b(latest|today|current|news|price|weather|score|winner|2025|2026|right now|live)\b/i.test(lastUserQuery);
-  const modelsToTry = getPrioritizedModels(["gemini-4-hydrogen", "gemini-3.1-flash-lite"]);
+  const modelsToTry = getPrioritizedModels(["gemini-3.1-flash-lite", "gemini-4-hydrogen"]);
   for (const model of modelsToTry) {
     let streamedText = "";
     try {
       const modelConfig = {
         systemInstruction,
         thinkingConfig: {
-          thinkingLevel: model === "gemini-4-hydrogen" ? isReasoning ? ThinkingLevel.HIGH : ThinkingLevel.LOW : ThinkingLevel.MINIMAL
+          thinkingLevel: model === "gemini-4-hydrogen" ? isReasoning ? ThinkingLevel.HIGH : ThinkingLevel.MINIMAL : ThinkingLevel.MINIMAL
         }
       };
       if (wantsFreshWebInfo) {

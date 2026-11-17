@@ -529,8 +529,8 @@ The user is browsing as an anonymous guest (no account signed in).
     baseConfig.tools = [{ googleSearch: {} }];
   }
 
-  // Official active Gemini models: gemini-4-hydrogen (LOW thinking for fast chat, HIGH for deep reasoning), gemini-3.1-flash-lite as fast secondary
-  const baseModels = ['gemini-4-hydrogen', 'gemini-3.1-flash-lite'];
+  // Prioritize gemini-3.1-flash-lite for blazing fast sub-second responses, fallback to gemini-4-hydrogen
+  const baseModels = ['gemini-3.1-flash-lite', 'gemini-4-hydrogen'];
   const modelsToTry = getPrioritizedModels(baseModels);
   const activeClient = getAIClient();
 
@@ -565,7 +565,7 @@ The user is browsing as an anonymous guest (no account signed in).
 
       if (model === 'gemini-4-hydrogen') {
         modelConfig.thinkingConfig = {
-          thinkingLevel: isReasoning ? ThinkingLevel.HIGH : ThinkingLevel.LOW,
+          thinkingLevel: isReasoning ? ThinkingLevel.HIGH : ThinkingLevel.MINIMAL,
         };
       } else if (model === 'gemini-3.1-flash-lite') {
         modelConfig.thinkingConfig = {
@@ -739,7 +739,7 @@ ${req.customInstructions ? `\nCustom Instructions: ${req.customInstructions}` : 
     req.enableDeepResearch ||
     /\b(latest|today|current|news|price|weather|score|winner|2025|2026|right now|live)\b/i.test(lastUserQuery);
 
-  const modelsToTry = getPrioritizedModels(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
+  const modelsToTry = getPrioritizedModels(['gemini-3.1-flash-lite', 'gemini-4-hydrogen']);
 
   for (const model of modelsToTry) {
     let streamedText = '';
@@ -751,7 +751,7 @@ ${req.customInstructions ? `\nCustom Instructions: ${req.customInstructions}` : 
             model === 'gemini-4-hydrogen'
               ? isReasoning
                 ? ThinkingLevel.HIGH
-                : ThinkingLevel.LOW
+                : ThinkingLevel.MINIMAL
               : ThinkingLevel.MINIMAL,
         },
       };
