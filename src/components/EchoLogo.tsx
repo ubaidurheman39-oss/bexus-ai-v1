@@ -109,7 +109,7 @@ export const EchoLogo: React.FC<EchoLogoProps> = ({ size = 48, className = '' })
           cy="36"
           r="2.2"
           fill="#f5d0fe"
-          className="animate-pulse"
+          opacity="0.9"
         />
       </svg>
     </div>

@@ -7470,10 +7470,35 @@ ${text.trim()}
     }
   }
   try {
+    const pollRes = await fetch("https://text.pollinations.ai/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "openai",
+        messages: [
+          { role: "system", content: `You are a professional master translator. Translate the given text from ${srcName} to ${tgtName} with ${tone} tone. Return ONLY the translated text.` },
+          { role: "user", content: text.trim() }
+        ]
+      }),
+      signal: AbortSignal.timeout(4e3)
+    });
+    if (pollRes.ok) {
+      const txt = (await pollRes.text()).trim();
+      if (txt && !txt.startsWith("{") && txt.length > 1) {
+        return { translatedText: txt };
+      }
+    }
+  } catch {
+  }
+  try {
     const cleanSource = sourceLang === "ur-roman" ? "ur" : sourceLang;
     const cleanTarget = targetLang === "ur-roman" ? "ur" : targetLang;
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(cleanSource)}&tl=${encodeURIComponent(cleanTarget)}&dt=t&q=${encodeURIComponent(text.trim())}`;
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      }
+    });
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && Array.isArray(data[0])) {
@@ -8800,29 +8825,27 @@ app.get("/google:hash.html", (req, res) => {
   res.setHeader("Content-Type", "text/html");
   res.send(`google-site-verification: ${filename}`);
 });
-app.get("/robots.txt", (_req, res) => {
+app.get("/robots.txt", (req, res) => {
+  const reqHost = req.get("x-forwarded-host") || req.get("host");
+  const baseUrl = reqHost && !reqHost.includes("localhost") && !reqHost.includes("127.0.0.1") ? `${req.headers["x-forwarded-proto"] || "https"}://${reqHost}` : "https://bexus-ai-v1.vercel.app";
   res.setHeader("Content-Type", "text/plain");
   res.send(`User-agent: *
 Allow: /
 
-Sitemap: https://bexus-ai.ai.studio/sitemap.xml
+Sitemap: ${baseUrl}/sitemap.xml
 `);
 });
-app.get("/sitemap.xml", (_req, res) => {
+app.get("/sitemap.xml", (req, res) => {
+  const reqHost = req.get("x-forwarded-host") || req.get("host");
+  const baseUrl = reqHost && !reqHost.includes("localhost") && !reqHost.includes("127.0.0.1") ? `${req.headers["x-forwarded-proto"] || "https"}://${reqHost}` : "https://bexus-ai-v1.vercel.app";
   res.setHeader("Content-Type", "application/xml");
   res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://bexus-ai.ai.studio/</loc>
+    <loc>${baseUrl}/</loc>
     <lastmod>${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>https://bexus-ai.ai.studio/privacy</loc>
-    <lastmod>${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
   </url>
 </urlset>`);
 });

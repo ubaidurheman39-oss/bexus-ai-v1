@@ -37,6 +37,9 @@ export default defineConfig(() => {
               if (id.includes('react') || id.includes('react-dom') || id.includes('motion')) {
                 return 'vendor-framework';
               }
+              if (id.includes('firebase') || id.includes('@firebase')) {
+                return 'vendor-firebase';
+              }
               if (id.includes('lucide-react')) {
                 return 'vendor-lucide';
               }

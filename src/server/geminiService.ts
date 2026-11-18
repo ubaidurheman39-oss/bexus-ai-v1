@@ -2804,7 +2804,11 @@ ${text.trim()}
     const cleanSource = sourceLang === 'ur-roman' ? 'ur' : sourceLang;
     const cleanTarget = targetLang === 'ur-roman' ? 'ur' : targetLang;
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(cleanSource)}&tl=${encodeURIComponent(cleanTarget)}&dt=t&q=${encodeURIComponent(text.trim())}`;
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && Array.isArray(data[0])) {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { sounds } from '../../services/soundEffects';
 import {
@@ -71,6 +71,14 @@ export const LanguageTranslatorModal: React.FC<LanguageTranslatorModalProps> = (
   const [copiedRoman, setCopiedRoman] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState<'input' | 'output' | null>(null);
 
+  useEffect(() => {
+    if (!inputText || !inputText.trim()) return;
+    const timer = setTimeout(() => {
+      handleTranslate(inputText, tone, sourceLang, targetLang);
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [inputText, sourceLang, targetLang, tone]);
+
   if (!isOpen) return null;
 
   const isRtl = (code: string) => ['ur', 'ar', 'fa', 'ps', 'sd'].includes(code);
@@ -128,12 +136,12 @@ export const LanguageTranslatorModal: React.FC<LanguageTranslatorModalProps> = (
     }
   };
 
-  const handleTranslate = async (
+  async function handleTranslate(
     textToTranslate = inputText,
     customTone = tone,
     customSource = sourceLang,
     customTarget = targetLang
-  ) => {
+  ) {
     if (!textToTranslate.trim()) return;
     sounds.playClick();
     setIsTranslating(true);

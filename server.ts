@@ -61,27 +61,29 @@ app.get('/google:hash.html', (req, res) => {
 });
 
 // Robots.txt for Google Crawler & SEO Indexing
-app.get('/robots.txt', (_req, res) => {
+app.get('/robots.txt', (req, res) => {
+  const reqHost = req.get('x-forwarded-host') || req.get('host');
+  const baseUrl = reqHost && !reqHost.includes('localhost') && !reqHost.includes('127.0.0.1')
+    ? `${req.headers['x-forwarded-proto'] || 'https'}://${reqHost}`
+    : 'https://bexus-ai-v1.vercel.app';
   res.setHeader('Content-Type', 'text/plain');
-  res.send(`User-agent: *\nAllow: /\n\nSitemap: https://bexus-ai.ai.studio/sitemap.xml\n`);
+  res.send(`User-agent: *\nAllow: /\n\nSitemap: ${baseUrl}/sitemap.xml\n`);
 });
 
 // Sitemap.xml for Google Search indexing
-app.get('/sitemap.xml', (_req, res) => {
+app.get('/sitemap.xml', (req, res) => {
+  const reqHost = req.get('x-forwarded-host') || req.get('host');
+  const baseUrl = reqHost && !reqHost.includes('localhost') && !reqHost.includes('127.0.0.1')
+    ? `${req.headers['x-forwarded-proto'] || 'https'}://${reqHost}`
+    : 'https://bexus-ai-v1.vercel.app';
   res.setHeader('Content-Type', 'application/xml');
   res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://bexus-ai.ai.studio/</loc>
+    <loc>${baseUrl}/</loc>
     <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>https://bexus-ai.ai.studio/privacy</loc>
-    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
   </url>
 </urlset>`);
 });

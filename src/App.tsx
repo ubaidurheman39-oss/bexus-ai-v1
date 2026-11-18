@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Image as ImageIcon, 
@@ -52,33 +52,33 @@ import {
   Crown,
   Gauge
 } from 'lucide-react';
-import { CosmicBackground } from './components/CosmicBackground';
 import { EchoLogo } from './components/EchoLogo';
 import { BexusAuthScreen } from './components/BexusAuthScreen';
-import { Sidebar, SavedChat, SavedProjectItem } from './components/Sidebar';
+import type { SavedChat, SavedProjectItem } from './components/Sidebar';
 import { Attachment, DeepResearchReport } from './types';
 import { sounds } from './services/soundEffects';
 import { getClientDirectImageUrl } from './utils/imageFallback';
 import { generateNaturalConversationalReply, tryInstantDirectReply } from './utils/intelligentConversationalEngine';
-import { auth, signOut, onAuthStateChanged } from './services/firebase';
-import { DeepResearchModal } from './components/Modals/DeepResearchModal';
-import { ImageStudioModal } from './components/Modals/ImageStudioModal';
-import { VoiceStudioModal } from './components/Modals/VoiceStudioModal';
-import { DocSummarizerModal } from './components/Modals/DocSummarizerModal';
-import { LanguageTranslatorModal } from './components/Modals/LanguageTranslatorModal';
-import { LiveCameraModal } from './components/Modals/LiveCameraModal';
-import { MediaAnalysisModal } from './components/Modals/MediaAnalysisModal';
-import { AgenticStudioModal } from './components/Modals/AgenticStudioModal';
-import { AppBuilderStudioModal } from './components/Modals/AppBuilderStudioModal';
-import { CommandPaletteModal } from './components/Modals/CommandPaletteModal';
-import { GuidedLearningModal } from './components/Modals/GuidedLearningModal';
-import { UltraPlanModal } from './components/Modals/UltraPlanModal';
-import { ULTRA_FEATURES, UltraFeature } from './data/ultraFeatures';
-import { InteractiveAppCard } from './components/InteractiveAppCard';
-import { PromptTemplatesModal, PROMPT_TEMPLATES } from './components/Modals/PromptTemplatesModal';
-import { UsageQuotaModal } from './components/Modals/UsageQuotaModal';
+import type { UltraFeature } from './data/ultraFeatures';
 import { AI_PERSONAS, AIPersona } from './data/personas';
-import { exportAsMarkdown, exportAsPDF, exportAsPPTX, exportAsCode } from './services/exportService';
+
+const CosmicBackground = lazy(() => import('./components/CosmicBackground').then(m => ({ default: m.CosmicBackground })));
+const Sidebar = lazy(() => import('./components/Sidebar').then(m => ({ default: m.Sidebar })));
+const InteractiveAppCard = lazy(() => import('./components/InteractiveAppCard').then(m => ({ default: m.InteractiveAppCard })));
+const DeepResearchModal = lazy(() => import('./components/Modals/DeepResearchModal').then(m => ({ default: m.DeepResearchModal })));
+const ImageStudioModal = lazy(() => import('./components/Modals/ImageStudioModal').then(m => ({ default: m.ImageStudioModal })));
+const VoiceStudioModal = lazy(() => import('./components/Modals/VoiceStudioModal').then(m => ({ default: m.VoiceStudioModal })));
+const DocSummarizerModal = lazy(() => import('./components/Modals/DocSummarizerModal').then(m => ({ default: m.DocSummarizerModal })));
+const LanguageTranslatorModal = lazy(() => import('./components/Modals/LanguageTranslatorModal').then(m => ({ default: m.LanguageTranslatorModal })));
+const LiveCameraModal = lazy(() => import('./components/Modals/LiveCameraModal').then(m => ({ default: m.LiveCameraModal })));
+const MediaAnalysisModal = lazy(() => import('./components/Modals/MediaAnalysisModal').then(m => ({ default: m.MediaAnalysisModal })));
+const AgenticStudioModal = lazy(() => import('./components/Modals/AgenticStudioModal').then(m => ({ default: m.AgenticStudioModal })));
+const AppBuilderStudioModal = lazy(() => import('./components/Modals/AppBuilderStudioModal').then(m => ({ default: m.AppBuilderStudioModal })));
+const CommandPaletteModal = lazy(() => import('./components/Modals/CommandPaletteModal').then(m => ({ default: m.CommandPaletteModal })));
+const GuidedLearningModal = lazy(() => import('./components/Modals/GuidedLearningModal').then(m => ({ default: m.GuidedLearningModal })));
+const UltraPlanModal = lazy(() => import('./components/Modals/UltraPlanModal').then(m => ({ default: m.UltraPlanModal })));
+const PromptTemplatesModal = lazy(() => import('./components/Modals/PromptTemplatesModal').then(m => ({ default: m.PromptTemplatesModal })));
+const UsageQuotaModal = lazy(() => import('./components/Modals/UsageQuotaModal').then(m => ({ default: m.UsageQuotaModal })));
 
 interface MessageItem {
   id: string;
@@ -187,11 +187,9 @@ export default function App() {
 
   const handleLogout = () => {
     sounds.playClick();
-    try {
-      signOut(auth);
-    } catch (e) {
-      console.warn('SignOut error:', e);
-    }
+    import('./services/firebase')
+      .then(({ auth, signOut }) => signOut(auth))
+      .catch((e) => console.warn('SignOut error:', e));
     setCurrentUser(null);
     setMessages([]);
     setActiveChatId(null);
@@ -724,39 +722,53 @@ export default function App() {
     }
   }, [sessions]);
 
-  // Sync Firebase Auth state across sessions / browser tabs
+  // Sync Firebase Auth state across sessions / browser tabs (deferred to keep initial load ultra-fast)
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser) {
-        const accountName = firebaseUser.displayName?.trim() || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'User');
-        const userObj = {
-          uid: firebaseUser.uid,
-          name: accountName,
-          displayName: accountName,
-          email: firebaseUser.email,
-          photoURL: firebaseUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${firebaseUser.uid}`,
-          provider: 'google'
-        };
-        setCurrentUser((prev: any) => {
-          if (!prev || prev.uid !== userObj.uid || prev.name !== userObj.name) {
-            try {
-              localStorage.setItem('bexus_user', JSON.stringify(userObj));
-              const userKey = `echo_ai_messages_${userObj.uid}`;
-              const savedMsgs = localStorage.getItem(userKey);
-              if (savedMsgs) {
-                setMessages(JSON.parse(savedMsgs));
-              } else {
-                setMessages([]);
-              }
-            } catch {}
-            return userObj;
-          }
-          return prev;
-        });
-      }
-    });
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
 
-    return () => unsubscribe();
+    const timer = window.setTimeout(() => {
+      import('./services/firebase')
+        .then(({ auth, onAuthStateChanged }) => {
+          if (cancelled) return;
+          unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+            if (firebaseUser) {
+              const accountName = firebaseUser.displayName?.trim() || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'User');
+              const userObj = {
+                uid: firebaseUser.uid,
+                name: accountName,
+                displayName: accountName,
+                email: firebaseUser.email,
+                photoURL: firebaseUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${firebaseUser.uid}`,
+                provider: 'google'
+              };
+              setCurrentUser((prev: any) => {
+                if (!prev || prev.uid !== userObj.uid || prev.name !== userObj.name) {
+                  try {
+                    localStorage.setItem('bexus_user', JSON.stringify(userObj));
+                    const userKey = `echo_ai_messages_${userObj.uid}`;
+                    const savedMsgs = localStorage.getItem(userKey);
+                    if (savedMsgs) {
+                      setMessages(JSON.parse(savedMsgs));
+                    } else {
+                      setMessages([]);
+                    }
+                  } catch {}
+                  return userObj;
+                }
+                return prev;
+              });
+            }
+          });
+        })
+        .catch(() => {});
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   // Save active messages isolated per user
@@ -1634,54 +1646,64 @@ export default function App() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  if (!currentUser) {
+    return (
+      <div className={`relative min-h-screen w-full font-sans selection:bg-purple-500/30 selection:text-purple-200 overflow-x-hidden ${
+        isLightMode ? 'bg-[#f8fafc] text-slate-800' : 'bg-[#0c0b12] text-neutral-100'
+      }`}>
+        <BexusAuthScreen onLogin={handleLogin} isLightMode={isLightMode} />
+      </div>
+    );
+  }
+
   return (
     <div className={`relative min-h-screen w-full flex font-sans selection:bg-purple-500/30 selection:text-purple-200 overflow-x-hidden transition-colors duration-300 ${
       isLightMode ? 'bg-[#f8fafc] text-slate-800' : 'bg-[#0c0b12] text-neutral-100'
     }`}>
       {/* Background Volumetric Rays & Ambience */}
-      <CosmicBackground isLightMode={isLightMode} />
+      <Suspense fallback={null}>
+        <CosmicBackground isLightMode={isLightMode} />
+      </Suspense>
 
       {/* Sidebar: App Name -> New Chat -> Search Old Chats -> Old Chats List */}
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
-        chats={sessions}
-        activeChatId={activeChatId}
-        onSelectChat={handleSelectChat}
-        onNewChat={handleNewChat}
-        onDeleteChat={handleDeleteChat}
-        onOpenStudio={handleOpenStudio}
-        savedProjects={savedProjects}
-        onSelectProject={(proj) => {
-          if (proj.type === 'code') {
-            setAppBuilderInitialCode(proj.data?.html || '');
-            setAppBuilderInitialPrompt(proj.title || '');
-            setIsAppBuilderOpen(true);
-          } else if (proj.type === 'research') {
-            setSelectedResearchReport(proj.data);
-            setIsDeepResearchOpen(true);
-          }
-        }}
-        onDeleteProject={(id) => {
-          setSavedProjects(prev => {
-            const next = prev.filter(p => p.id !== id);
-            try { localStorage.setItem('bexus_saved_projects', JSON.stringify(next)); } catch {}
-            return next;
-          });
-        }}
-        tier={userTier}
-        tokensUsed={tokensUsed}
-        tokenLimit={999999999}
-        onOpenQuotaModal={() => setIsUsageQuotaOpen(true)}
-        isLightMode={isLightMode}
-        onToggleTheme={toggleTheme}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-      />
-
-      {!currentUser && (
-        <BexusAuthScreen onLogin={handleLogin} isLightMode={isLightMode} />
-      )}
+      <Suspense fallback={null}>
+        <Sidebar
+          isOpen={isSidebarOpen}
+          onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+          chats={sessions}
+          activeChatId={activeChatId}
+          onSelectChat={handleSelectChat}
+          onNewChat={handleNewChat}
+          onDeleteChat={handleDeleteChat}
+          onOpenStudio={handleOpenStudio}
+          savedProjects={savedProjects}
+          onSelectProject={(proj) => {
+            if (proj.type === 'code') {
+              setAppBuilderInitialCode(proj.data?.html || '');
+              setAppBuilderInitialPrompt(proj.title || '');
+              setIsAppBuilderOpen(true);
+            } else if (proj.type === 'research') {
+              setSelectedResearchReport(proj.data);
+              setIsDeepResearchOpen(true);
+            }
+          }}
+          onDeleteProject={(id) => {
+            setSavedProjects(prev => {
+              const next = prev.filter(p => p.id !== id);
+              try { localStorage.setItem('bexus_saved_projects', JSON.stringify(next)); } catch {}
+              return next;
+            });
+          }}
+          tier={userTier}
+          tokensUsed={tokensUsed}
+          tokenLimit={999999999}
+          onOpenQuotaModal={() => setIsUsageQuotaOpen(true)}
+          isLightMode={isLightMode}
+          onToggleTheme={toggleTheme}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+        />
+      </Suspense>
 
       {/* Main Content Area (Responsive margin when sidebar is open) */}
       <div 
@@ -1995,16 +2017,18 @@ export default function App() {
 
                     {/* Clean Code & Live Interactive App Display */}
                     {msg.codeSnippet && (
-                      <InteractiveAppCard
-                        title={msg.codeSnippet.title}
-                        code={msg.codeSnippet.code}
-                        language={msg.codeSnippet.language}
-                        onOpenStudio={() => {
-                          setAppBuilderInitialCode(msg.codeSnippet!.code);
-                          setAppBuilderInitialPrompt(msg.codeSnippet!.title);
-                          setIsAppBuilderOpen(true);
-                        }}
-                      />
+                      <Suspense fallback={null}>
+                        <InteractiveAppCard
+                          title={msg.codeSnippet.title}
+                          code={msg.codeSnippet.code}
+                          language={msg.codeSnippet.language}
+                          onOpenStudio={() => {
+                            setAppBuilderInitialCode(msg.codeSnippet!.code);
+                            setAppBuilderInitialPrompt(msg.codeSnippet!.title);
+                            setIsAppBuilderOpen(true);
+                          }}
+                        />
+                      </Suspense>
                     )}
 
                     {/* Live Web & API Action Runner (Doer Engine) Card */}
@@ -2395,9 +2419,10 @@ export default function App() {
 
                               <button
                                 type="button"
-                                onClick={() => {
+                                onClick={async () => {
                                   sounds.playClick();
                                   setActiveExportMenuId(null);
+                                  const { exportAsPDF } = await import('./services/exportService');
                                   exportAsPDF('Bexus AI Document', msg.content);
                                 }}
                                 className={`w-full px-2 py-1.5 rounded-lg text-left text-xs flex items-center gap-2 transition-colors cursor-pointer ${
@@ -2410,9 +2435,10 @@ export default function App() {
 
                               <button
                                 type="button"
-                                onClick={() => {
+                                onClick={async () => {
                                   sounds.playClick();
                                   const lines = msg.content.split('\n').filter(l => l.trim().length > 0);
+                                  const { exportAsPPTX } = await import('./services/exportService');
                                   exportAsPPTX('Executive Presentation', [
                                     { title: 'Overview', content: lines.slice(0, 3).join('\n') },
                                     { title: 'Key Insights', bullets: lines.slice(3, 10).map(l => l.replace(/^[-*•]\s*/, '')) }
@@ -2428,9 +2454,10 @@ export default function App() {
 
                               <button
                                 type="button"
-                                onClick={() => {
+                                onClick={async () => {
                                   sounds.playClick();
                                   setActiveExportMenuId(null);
+                                  const { exportAsMarkdown } = await import('./services/exportService');
                                   exportAsMarkdown(msg.content, `bexus-output-${Date.now()}.md`);
                                 }}
                                 className={`w-full px-2 py-1.5 rounded-lg text-left text-xs flex items-center gap-2 transition-colors cursor-pointer ${
@@ -2443,11 +2470,12 @@ export default function App() {
 
                               <button
                                 type="button"
-                                onClick={() => {
+                                onClick={async () => {
                                   sounds.playClick();
                                   setActiveExportMenuId(null);
                                   const codeMatch = msg.content.match(/```(?:[a-z]+)?\s*([\s\S]*?)```/);
                                   const exportCode = codeMatch ? codeMatch[1] : msg.content;
+                                  const { exportAsCode } = await import('./services/exportService');
                                   exportAsCode(exportCode, `bexus-code-${Date.now()}.txt`);
                                 }}
                                 className={`w-full px-2 py-1.5 rounded-lg text-left text-xs flex items-center gap-2 transition-colors cursor-pointer ${
@@ -2760,188 +2788,200 @@ export default function App() {
         </main>
       </div>
 
-      {/* 1. Autonomous Deep Web Research Studio */}
-      <DeepResearchModal
-        isOpen={isDeepResearchOpen}
-        onClose={() => {
-          setIsDeepResearchOpen(false);
-          setSelectedResearchReport(null);
-        }}
-        initialReport={selectedResearchReport}
-        onSendToChat={(content) => {
-          setIsDeepResearchOpen(false);
-          handleSendMessage(content);
-        }}
-      />
+      {/* Lazy-Loaded Studio & Workspace Modals */}
+      <Suspense fallback={null}>
+        {isDeepResearchOpen && (
+          <DeepResearchModal
+            isOpen={isDeepResearchOpen}
+            onClose={() => {
+              setIsDeepResearchOpen(false);
+              setSelectedResearchReport(null);
+            }}
+            initialReport={selectedResearchReport}
+            onSendToChat={(content) => {
+              setIsDeepResearchOpen(false);
+              handleSendMessage(content);
+            }}
+          />
+        )}
 
-      
+        {isImageStudioOpen && (
+          <ImageStudioModal
+            isOpen={isImageStudioOpen}
+            onClose={() => setIsImageStudioOpen(false)}
+            onSendToChat={(imageUrl, promptText) => {
+              setIsImageStudioOpen(false);
+              sounds.playReceive();
+              const newMsg: MessageItem = {
+                id: 'msg_asst_' + Date.now(),
+                role: 'assistant',
+                content: `🎨 **Generated Artwork**: "${promptText}"`,
+                imageUrl: imageUrl,
+                timestamp: Date.now(),
+                reasoningSteps: [
+                  'Custom style tuned via Image Studio',
+                  'Raytraced diffusion weights synthesized',
+                  'Ultra-HD output generated'
+                ],
+                thoughtDuration: '1.5s'
+              };
+              setMessages(prev => [...prev, newMsg]);
+            }}
+          />
+        )}
 
-      {/* 3. 8K Photorealistic AI Image Studio */}
-      <ImageStudioModal
-        isOpen={isImageStudioOpen}
-        onClose={() => setIsImageStudioOpen(false)}
-        onSendToChat={(imageUrl, promptText) => {
-          setIsImageStudioOpen(false);
-          sounds.playReceive();
-          const newMsg: MessageItem = {
-            id: 'msg_asst_' + Date.now(),
-            role: 'assistant',
-            content: `🎨 **Generated Artwork**: "${promptText}"`,
-            imageUrl: imageUrl,
-            timestamp: Date.now(),
-            reasoningSteps: [
-              'Custom style tuned via Image Studio',
-              'Raytraced diffusion weights synthesized',
-              'Ultra-HD output generated'
-            ],
-            thoughtDuration: '1.5s'
-          };
-          setMessages(prev => [...prev, newMsg]);
-        }}
-      />
+        {isVoiceStudioOpen && (
+          <VoiceStudioModal
+            isOpen={isVoiceStudioOpen}
+            onClose={() => setIsVoiceStudioOpen(false)}
+            onSendToChat={(text) => {
+              setIsVoiceStudioOpen(false);
+              handleSendMessage(text);
+            }}
+          />
+        )}
 
-      
+        {isDocModalOpen && (
+          <DocSummarizerModal
+            isOpen={isDocModalOpen}
+            onClose={() => setIsDocModalOpen(false)}
+            onSendToChat={(text) => {
+              setIsDocModalOpen(false);
+              handleSendMessage(text);
+            }}
+          />
+        )}
 
+        {isTranslateModalOpen && (
+          <LanguageTranslatorModal
+            isOpen={isTranslateModalOpen}
+            onClose={() => setIsTranslateModalOpen(false)}
+            onSendToChat={(text) => {
+              setIsTranslateModalOpen(false);
+              handleSendMessage(text);
+            }}
+          />
+        )}
 
-      {/* 7. Neural Voice Studio & Multi-lingual Speech */}
-      <VoiceStudioModal
-        isOpen={isVoiceStudioOpen}
-        onClose={() => setIsVoiceStudioOpen(false)}
-        onSendToChat={(text) => {
-          setIsVoiceStudioOpen(false);
-          handleSendMessage(text);
-        }}
-      />
+        {isAppBuilderOpen && (
+          <AppBuilderStudioModal
+            isOpen={isAppBuilderOpen}
+            onClose={() => setIsAppBuilderOpen(false)}
+            initialPrompt={appBuilderInitialPrompt}
+            initialCode={appBuilderInitialCode}
+            onSendToChat={(text) => {
+              setIsAppBuilderOpen(false);
+              handleSendMessage(text);
+            }}
+          />
+        )}
 
-      {/* 8. Deep Document & PDF Intelligence */}
-      <DocSummarizerModal
-        isOpen={isDocModalOpen}
-        onClose={() => setIsDocModalOpen(false)}
-        onSendToChat={(text) => {
-          setIsDocModalOpen(false);
-          handleSendMessage(text);
-        }}
-      />
+        {isCameraModalOpen && (
+          <LiveCameraModal
+            isOpen={isCameraModalOpen}
+            onClose={() => setIsCameraModalOpen(false)}
+            onSendToChat={(imageUrl, analysisText) => {
+              setIsCameraModalOpen(false);
+              sounds.playReceive();
+              const newMsg: MessageItem = {
+                id: 'msg_asst_' + Date.now(),
+                role: 'assistant',
+                content: `📸 **Vision Inspection Analysis**:\n\n${analysisText}`,
+                imageUrl: imageUrl,
+                timestamp: Date.now(),
+                reasoningSteps: [
+                  'Optical frame captured from live viewport',
+                  'Object detection & spatial reasoning processed',
+                  'Scene analysis generated'
+                ],
+                thoughtDuration: '1.2s'
+              };
+              setMessages(prev => [...prev, newMsg]);
+            }}
+          />
+        )}
 
-      {/* 9. Universal Polyglot Neural Translator */}
-      <LanguageTranslatorModal
-        isOpen={isTranslateModalOpen}
-        onClose={() => setIsTranslateModalOpen(false)}
-        onSendToChat={(text) => {
-          setIsTranslateModalOpen(false);
-          handleSendMessage(text);
-        }}
-      />
+        {isMediaAnalysisModalOpen && (
+          <MediaAnalysisModal
+            isOpen={isMediaAnalysisModalOpen}
+            onClose={() => setIsMediaAnalysisModalOpen(false)}
+            onSendToChat={(summary) => {
+              setIsMediaAnalysisModalOpen(false);
+              handleSendMessage(summary);
+            }}
+          />
+        )}
 
-      {/* 10. Bexus AppForge — AI Full-Stack App Builder & Studio Suite */}
-      <AppBuilderStudioModal
-        isOpen={isAppBuilderOpen}
-        onClose={() => setIsAppBuilderOpen(false)}
-        initialPrompt={appBuilderInitialPrompt}
-        initialCode={appBuilderInitialCode}
-        onSendToChat={(text) => {
-          setIsAppBuilderOpen(false);
-          handleSendMessage(text);
-        }}
-      />
+        {isAgenticModalOpen && (
+          <AgenticStudioModal
+            isOpen={isAgenticModalOpen}
+            onClose={() => setIsAgenticModalOpen(false)}
+            onSendToChat={(content) => {
+              setIsAgenticModalOpen(false);
+              handleSendMessage(content);
+            }}
+          />
+        )}
 
-      {/* 11. Live Camera & Realtime Vision Studio */}
-      <LiveCameraModal
-        isOpen={isCameraModalOpen}
-        onClose={() => setIsCameraModalOpen(false)}
-        onSendToChat={(imageUrl, analysisText) => {
-          setIsCameraModalOpen(false);
-          sounds.playReceive();
-          const newMsg: MessageItem = {
-            id: 'msg_asst_' + Date.now(),
-            role: 'assistant',
-            content: `📸 **Vision Inspection Analysis**:\n\n${analysisText}`,
-            imageUrl: imageUrl,
-            timestamp: Date.now(),
-            reasoningSteps: [
-              'Optical frame captured from live viewport',
-              'Object detection & spatial reasoning processed',
-              'Scene analysis generated'
-            ],
-            thoughtDuration: '1.2s'
-          };
-          setMessages(prev => [...prev, newMsg]);
-        }}
-      />
+        {isGuidedLearningOpen && (
+          <GuidedLearningModal
+            isOpen={isGuidedLearningOpen}
+            onClose={() => setIsGuidedLearningOpen(false)}
+            onSendToChat={(content) => {
+              setIsGuidedLearningOpen(false);
+              handleSendMessage(content);
+            }}
+          />
+        )}
 
-      {/* 12. Audio & Video Media Analysis Studio */}
-      <MediaAnalysisModal
-        isOpen={isMediaAnalysisModalOpen}
-        onClose={() => setIsMediaAnalysisModalOpen(false)}
-        onSendToChat={(summary) => {
-          setIsMediaAnalysisModalOpen(false);
-          handleSendMessage(summary);
-        }}
-      />
+        {isUltraModalOpen && (
+          <UltraPlanModal
+            isOpen={isUltraModalOpen}
+            onClose={() => setIsUltraModalOpen(false)}
+            onActivateFeature={handleActivateUltraFeature}
+          />
+        )}
 
-      {/* 13. Autonomous Agentic Workflow Studio */}
-      <AgenticStudioModal
-        isOpen={isAgenticModalOpen}
-        onClose={() => setIsAgenticModalOpen(false)}
-        onSendToChat={(content) => {
-          setIsAgenticModalOpen(false);
-          handleSendMessage(content);
-        }}
-      />
+        {isCommandPaletteOpen && (
+          <CommandPaletteModal
+            isOpen={isCommandPaletteOpen}
+            onClose={() => setIsCommandPaletteOpen(false)}
+            onSelectAction={handleCommandAction}
+          />
+        )}
 
-      {/* 14. Interactive Guided Learning Studio */}
-      <GuidedLearningModal
-        isOpen={isGuidedLearningOpen}
-        onClose={() => setIsGuidedLearningOpen(false)}
-        onSendToChat={(content) => {
-          setIsGuidedLearningOpen(false);
-          handleSendMessage(content);
-        }}
-      />
+        {isPromptTemplatesOpen && (
+          <PromptTemplatesModal
+            isOpen={isPromptTemplatesOpen}
+            onClose={() => setIsPromptTemplatesOpen(false)}
+            onSelectTemplate={(chosenPrompt) => {
+              setPrompt(chosenPrompt);
+              setTimeout(() => textareaRef.current?.focus(), 60);
+            }}
+            isLightMode={isLightMode}
+          />
+        )}
 
-      {/* 15. Gemini Ultra Features Suite Modal */}
-      <UltraPlanModal
-        isOpen={isUltraModalOpen}
-        onClose={() => setIsUltraModalOpen(false)}
-        onActivateFeature={handleActivateUltraFeature}
-      />
-
-      {/* 16. Command Palette Matrix */}
-      <CommandPaletteModal
-        isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        onSelectAction={handleCommandAction}
-      />
-
-      {/* 17. One-Click AI Prompt Templates Modal (Feature 1) */}
-      <PromptTemplatesModal
-        isOpen={isPromptTemplatesOpen}
-        onClose={() => setIsPromptTemplatesOpen(false)}
-        onSelectTemplate={(chosenPrompt) => {
-          setPrompt(chosenPrompt);
-          setTimeout(() => textareaRef.current?.focus(), 60);
-        }}
-        isLightMode={isLightMode}
-      />
-
-      {/* 18. Token & Usage Quota Telemetry Modal (Feature 7) */}
-      <UsageQuotaModal
-        isOpen={isUsageQuotaOpen}
-        onClose={() => setIsUsageQuotaOpen(false)}
-        tier={userTier}
-        tokensUsed={tokensUsed}
-        tokenLimit={999999999}
-        messagesSent={messagesSentCount}
-        onToggleTier={(newTier) => {
-          setUserTier(newTier);
-          try { localStorage.setItem('bexus_user_tier', newTier); } catch {}
-        }}
-        onResetQuota={() => {
-          setTokensUsed(0);
-          try { localStorage.setItem('bexus_tokens_used', '0'); } catch {}
-        }}
-        isLightMode={isLightMode}
-      />
+        {isUsageQuotaOpen && (
+          <UsageQuotaModal
+            isOpen={isUsageQuotaOpen}
+            onClose={() => setIsUsageQuotaOpen(false)}
+            tier={userTier}
+            tokensUsed={tokensUsed}
+            tokenLimit={999999999}
+            messagesSent={messagesSentCount}
+            onToggleTier={(newTier) => {
+              setUserTier(newTier);
+              try { localStorage.setItem('bexus_user_tier', newTier); } catch {}
+            }}
+            onResetQuota={() => {
+              setTokensUsed(0);
+              try { localStorage.setItem('bexus_tokens_used', '0'); } catch {}
+            }}
+            isLightMode={isLightMode}
+          />
+        )}
+      </Suspense>
 
       {/* High-Definition Fullscreen Image Lightbox Modal */}
       <AnimatePresence>

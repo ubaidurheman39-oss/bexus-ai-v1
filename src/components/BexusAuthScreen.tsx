@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { 
   Chrome, 
@@ -8,12 +8,18 @@ import {
   ShieldCheck, 
   Sparkles,
   Zap,
-  Brain,
   Globe
 } from 'lucide-react';
 import { EchoLogo } from './EchoLogo';
 import { sounds } from '../services/soundEffects';
-import { auth, googleProvider, signInWithPopup } from '../services/firebase';
+
+let firebasePromise: Promise<typeof import('../services/firebase')> | null = null;
+const loadFirebase = () => {
+  if (!firebasePromise) {
+    firebasePromise = import('../services/firebase');
+  }
+  return firebasePromise;
+};
 
 interface BexusAuthScreenProps {
   onLogin: (user: any) => void;
@@ -27,11 +33,19 @@ export const BexusAuthScreen: React.FC<BexusAuthScreenProps> = ({ onLogin, isLig
   const [isSubmitting, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      loadFirebase().catch(() => {});
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const handleGoogleLogin = async () => {
     sounds.playClick();
     setIsLoading(true);
     setErrorMessage(null);
     try {
+      const { auth, googleProvider, signInWithPopup } = await loadFirebase();
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
       let accountName = user.displayName?.trim();
@@ -120,7 +134,7 @@ export const BexusAuthScreen: React.FC<BexusAuthScreenProps> = ({ onLogin, isLig
       </div>
 
       <motion.div 
-        initial={{ opacity: 0, y: 20 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         className={`relative w-full max-w-[440px] rounded-[32px] border p-8 sm:p-10 shadow-2xl backdrop-blur-xl ${
           isLightMode 
@@ -157,6 +171,8 @@ export const BexusAuthScreen: React.FC<BexusAuthScreenProps> = ({ onLogin, isLig
             {/* Big Google Button */}
             <button
               onClick={handleGoogleLogin}
+              onMouseEnter={() => { loadFirebase().catch(() => {}); }}
+              onFocus={() => { loadFirebase().catch(() => {}); }}
               disabled={isSubmitting}
               className={`w-full group flex items-center justify-center gap-3 h-14 rounded-2xl font-bold text-sm transition-all cursor-pointer active:scale-[0.98] ${
                 isLightMode 
