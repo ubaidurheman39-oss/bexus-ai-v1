@@ -57,7 +57,7 @@ import { BexusAuthScreen } from './components/BexusAuthScreen';
 import type { SavedChat, SavedProjectItem } from './components/Sidebar';
 import { Attachment, DeepResearchReport } from './types';
 import { sounds } from './services/soundEffects';
-import { getClientDirectImageUrl } from './utils/imageFallback';
+import { getClientDirectImageUrl, normalizePromptTypos } from './utils/imageFallback';
 import { generateNaturalConversationalReply, tryInstantDirectReply, detectMessageLanguage } from './utils/intelligentConversationalEngine';
 import type { UltraFeature } from './data/ultraFeatures';
 import { AI_PERSONAS, AIPersona } from './data/personas';
@@ -1066,23 +1066,28 @@ export default function App() {
       const startTime = Date.now();
 
       if (isImgReq) {
-        let cleanPrompt = content
-          .replace(/^(please\s+|can you\s+|kindly\s+)/i, '')
-          .replace(/^(generate|create|make|draw|render)\s+(an?\s+)?(ai\s+)?(cinematic\s+|hyper-realistic\s+|8k\s+|realistic\s+)?(artwork\s+of\s+|image\s*(of|about)?\s*|photo\s*(of|about)?\s*|picture\s*(of|about)?\s*|pic\s*(of|about)?\s*|imge\s*(of|about)?\s*|tasweer\s*(of|about)?\s*)/i, '')
-          .replace(/^(image|photo|picture|tasweer)\s+(of|about|for)\s+/i, '')
-          .replace(/\s+(ki\s+tasweer\s+banao|ki\s+image\s+banao|bana\s+kar\s+do|bana\s+do|tasweer\s+chahiye|image\s+chahiye)$/i, '')
-          .trim();
-        if (!cleanPrompt) cleanPrompt = content;
+        let cleanPrompt = normalizePromptTypos(
+          content
+            .replace(/^(please\s+|can you\s+|kindly\s+)/i, '')
+            .replace(/^(generate|create|make|draw|render)\s+(an?\s+)?(ai\s+)?(cinematic\s+|hyper-realistic\s+|8k\s+|realistic\s+)?(artwork\s+of\s+|image\s*(of|about)?\s*|photo\s*(of|about)?\s*|picture\s*(of|about)?\s*|pic\s*(of|about)?\s*|imge\s*(of|about)?\s*|tasweer\s*(of|about)?\s*)/i, '')
+            .replace(/^(image|photo|picture|tasweer)\s+(of|about|for)\s+/i, '')
+            .replace(/\s+(ki\s+tasweer\s+banao|ki\s+image\s+banao|bana\s+kar\s+do|bana\s+do|tasweer\s+chahiye|image\s+chahiye)$/i, '')
+            .trim()
+        );
+        if (!cleanPrompt) cleanPrompt = normalizePromptTypos(content) || content;
 
         const isAutomotiveOrLandscape = /(bmw|mercedes|audi|porsche|ferrari|car|vehicle|highway|landscape|mountain|sunset|city|cyberpunk)/i.test(cleanPrompt);
+        const isParkedCar = /(bmw|mercedes|audi|porsche|ferrari|car|vehicle|sedan|coupe|suv|truck|bike)/i.test(cleanPrompt) &&
+          /(stopped|parked|standing|stationed|idling|outside|in front of|coffee\s*shop|cafe|bakery|restaurant|petrol\s*station|gas\s*station|driveway|garage|showroom|curbside|parking)/i.test(cleanPrompt);
 
         const imgRes = await fetch('/api/image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             prompt: cleanPrompt,
-            style: 'Cinematic Photorealistic (8K)',
-            aspectRatio: isAutomotiveOrLandscape ? '16:9' : '1:1'
+            style: 'photorealistic',
+            aspectRatio: isAutomotiveOrLandscape ? '16:9' : '1:1',
+            camera: isParkedCar ? '35mm outdoor street lens, stationary parked composition, sharp static wheels' : undefined
           })
         });
         let imgData: any = {};

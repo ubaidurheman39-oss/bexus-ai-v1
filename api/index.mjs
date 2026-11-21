@@ -4786,7 +4786,8 @@ function normalizePromptTypos(rawPrompt) {
   for (const p of prefixes) {
     text = text.replace(p, "");
   }
-  return text.replace(/\bstooped\b/gi, "stopped").replace(/\bsation\b/gi, "station").replace(/\bstaton\b/gi, "station").replace(/\bpetrol\s*sation\b/gi, "petrol station").replace(/\bgas\s*sation\b/gi, "gas station").replace(/\bpetrol\s*pump\b/gi, "petrol station").replace(/\bmercedez\b/gi, "mercedes").replace(/\blamborgini\b/gi, "lamborghini").replace(/\blambo\b/gi, "lamborghini").replace(/\bporche\b/gi, "porsche").replace(/\bferari\b/gi, "ferrari").replace(/\bmclaren\b/gi, "mclaren").replace(/\bbugati\b/gi, "bugatti").replace(/\broles\s*royce\b/gi, "rolls royce").replace(/\bimge\b/gi, "image").replace(/\bpic\b/gi, "picture").replace(/\bnite\b/gi, "night").replace(/\bcarz\b/gi, "cars").replace(/\bgaari\b/gi, "car").replace(/\bgari\b/gi, "car").replace(/\bbarish\b/gi, "rain").replace(/\braat\b/gi, "night").replace(/\bdin\b/gi, "day").replace(/\bsher\b/gi, "lion").replace(/\bcheetah\b/gi, "cheetah").replace(/\bbilli\b/gi, "cat").replace(/\bkutta\b/gi, "dog").replace(/\bghora\b/gi, "horse").replace(/\bparinda\b/gi, "bird").replace(/\bshaheen\b/gi, "eagle").replace(/\bbaaz\b/gi, "hawk").replace(/\bpahad\b/gi, "mountain").replace(/\bpahar\b/gi, "mountain").replace(/\bsamandar\b/gi, "ocean").replace(/\bdarya\b/gi, "river").replace(/\bjungle\b/gi, "forest").replace(/\bsehra\b/gi, "desert").replace(/\bchaand\b/gi, "moon").replace(/\bsitare\b/gi, "stars").replace(/\bsuraj\b/gi, "sun").replace(/\bbakri\b/gi, "goat").replace(/\bbakra\b/gi, "goat").replace(/\bfauji\b/gi, "soldier").replace(/\bjang\b/gi, "battle").replace(/\bjahaz\b/gi, "airplane").replace(/\bkhana\b/gi, "food").replace(/\broti\b/gi, "bread").replace(/\bmahal\b/gi, "palace").replace(/\bghar\b/gi, "house").replace(/\bdulhan\b/gi, "bride").trim();
+  text = text.replace(/\bstooped\b/gi, "stopped").replace(/\bstoped\b/gi, "stopped").replace(/\bparkd\b/gi, "parked").replace(/\bcompition\b/gi, "Competition").replace(/\bcompetetion\b/gi, "Competition").replace(/\bcompetion\b/gi, "Competition").replace(/\bcoffe\b/gi, "coffee").replace(/\bcofee\b/gi, "coffee").replace(/\bcoffie\b/gi, "coffee").replace(/\bcolour\b/gi, "color").replace(/\bsation\b/gi, "station").replace(/\bstaton\b/gi, "station").replace(/\bpetrol\s*sation\b/gi, "petrol station").replace(/\bgas\s*sation\b/gi, "gas station").replace(/\bpetrol\s*pump\b/gi, "petrol station").replace(/\bmercedez\b/gi, "mercedes").replace(/\blamborgini\b/gi, "lamborghini").replace(/\blambo\b/gi, "lamborghini").replace(/\bporche\b/gi, "porsche").replace(/\bferari\b/gi, "ferrari").replace(/\bmclaren\b/gi, "mclaren").replace(/\bbugati\b/gi, "bugatti").replace(/\broles\s*royce\b/gi, "rolls royce").replace(/\bbmw\b/gi, "BMW").replace(/\bm5\b/gi, "M5").replace(/\bm4\b/gi, "M4").replace(/\bm3\b/gi, "M3").replace(/\bimge\b/gi, "image").replace(/\bpic\b/gi, "picture").replace(/\bnite\b/gi, "night").replace(/\bcarz\b/gi, "cars").replace(/\bgaari\b/gi, "car").replace(/\bgari\b/gi, "car").replace(/\bkhari\b/gi, "parked").replace(/\bkhadi\b/gi, "parked").replace(/\bruki\b/gi, "stopped").replace(/\bbahar\b/gi, "outside").replace(/\bandar\b/gi, "inside").replace(/\bk[ae]?\s+samne\b/gi, "in front of").replace(/\bsafed\b/gi, "white").replace(/\bkaala\b/gi, "black").replace(/\bkala\b/gi, "black").replace(/\bla+l\b/gi, "red").replace(/\bneela\b/gi, "blue").replace(/\bbarish\b/gi, "rain").replace(/\braat\b/gi, "night").replace(/\bdin\b/gi, "day").replace(/\bsher\b/gi, "lion").replace(/\bcheetah\b/gi, "cheetah").replace(/\bbilli\b/gi, "cat").replace(/\bkutta\b/gi, "dog").replace(/\bghora\b/gi, "horse").replace(/\bparinda\b/gi, "bird").replace(/\bshaheen\b/gi, "eagle").replace(/\bbaaz\b/gi, "hawk").replace(/\bpahad\b/gi, "mountain").replace(/\bpahar\b/gi, "mountain").replace(/\bsamandar\b/gi, "ocean").replace(/\bdarya\b/gi, "river").replace(/\bjungle\b/gi, "forest").replace(/\bsehra\b/gi, "desert").replace(/\bchaand\b/gi, "moon").replace(/\bsitare\b/gi, "stars").replace(/\bsuraj\b/gi, "sun").replace(/\bbakri\b/gi, "goat").replace(/\bbakra\b/gi, "goat").replace(/\bfauji\b/gi, "soldier").replace(/\bjang\b/gi, "battle").replace(/\bjahaz\b/gi, "airplane").replace(/\bkhana\b/gi, "food").replace(/\broti\b/gi, "bread").replace(/\bmahal\b/gi, "palace").replace(/\bghar\b/gi, "house").replace(/\bdulhan\b/gi, "bride");
+  return text.replace(/\baik\b/gi, "a").replace(/\s+\b(ho|hai|hain|karo|kardo|chahiye)\s*$/gi, "").replace(/\b(?:at|on|in|near|by)\s+(?:an?\s+)?(stopped|parked|standing)\b/gi, "$1").replace(/\b(at|in|on|near|outside)\s+\1\b/gi, "$1").replace(/\s{2,}/g, " ").trim();
 }
 var VISUAL_COLLECTIONS = {
   // 1. Gas / Petrol Stations with Supercars at Night
@@ -6162,27 +6163,20 @@ ${att.extractedText}
   };
 }
 function sanitizeAndCleanPrompt(rawPrompt) {
-  let text = (rawPrompt || "").trim();
-  const prefixes = [
-    /^(please\s+)?(can\s+you\s+)?(m?ake|create|generate|render|draw|build|paint|give\s+me|show\s+me)\s+(an?\s+)?(ai\s+)?(image|imge|pic|picture|photo|wallpaper|artwork|render|masterpiece|graphic)\s+(of|for|about)?\s+/i,
-    /^(ai\s+)?(image|imge|picture|pic|photo|wallpaper)\s+(of|for|about)?\s+/i,
-    /^(draw|render|paint|sketch)\s+(an?\s+)?(image|picture|photo)?\s+(of)?\s+/i,
-    /^(i\s+want\s+(an?\s+)?(image|imge|pic|picture)\s+(of)?)\s+/i,
-    /^(mujhe\s+)?(aik\s+)?(image|tasveer|photo|pic)\s+(bana\s+k?\s*do|chahiye)\s+/i
-  ];
-  for (const p of prefixes) {
-    text = text.replace(p, "");
-  }
-  text = text.replace(/\bstooped\b/gi, "stopped").replace(/\bsation\b/gi, "station").replace(/\bstaton\b/gi, "station").replace(/\bimge\b/gi, "image").replace(/\bpic\b/gi, "picture").replace(/\bnite\b/gi, "night").replace(/\bcarz\b/gi, "cars").replace(/\bgaari\b/gi, "car").replace(/\bgari\b/gi, "car").replace(/\blamborgini\b/gi, "lamborghini").replace(/\bmercedez\b/gi, "mercedes").replace(/\bporche\b/gi, "porsche").replace(/\bferari\b/gi, "ferrari").replace(/\bbarish\b/gi, "rain").replace(/\braat\b/gi, "night").replace(/\bsher\b/gi, "lion").replace(/\bbilli\b/gi, "cat").replace(/\bkutta\b/gi, "dog").replace(/\bbakri\b/gi, "goat").replace(/\bbakra\b/gi, "goat").trim();
+  const text = normalizePromptTypos(rawPrompt || "") || (rawPrompt || "").trim();
   const lower = text.toLowerCase();
-  const isAutomotive = /(bmw|mercedes|audi|porsche|ferrari|lamborghini|nissan|supra|gtr|car|vehicle|automobile|supercar|hypercar|bike|motorcycle|sedan|coupe|truck)/i.test(lower);
-  const isDynamicMotion = /(rolling|racing|highway|speed|motion|drifting|driving|pacing|track|chase|road|drift|burnout|fast)/i.test(lower);
-  const isRainOrNight = /(rain|rainy|night|wet|storm|dark|neon|midnight|puddles|mist|fog|slick)/i.test(lower);
-  const isWildlife = /(lion|tiger|leopard|cat|dog|bear|wolf|eagle|bird|horse|cheetah|goat|sheep|cow|deer|elephant|monkey|rabbit|fox|panda|animal|wildlife)/i.test(lower);
-  const isPortrait = /(woman|man|girl|boy|person|face|model|lady|portrait|character)/i.test(lower);
+  const isAutomotive = /(bmw|mercedes|audi|porsche|ferrari|lamborghini|nissan|supra|gtr|m5|m4|m3|car|cars|vehicle|automobile|supercar|hypercar|bike|motorcycle|sedan|coupe|suv|truck)/i.test(lower);
+  const explicitInside = /\b(inside|indoors|interior|showroom|living\s*room|living\s*hall|garage\s*interior)\b/i.test(lower);
+  const hasOutdoorVenue = /(coffee\s*shop|cafe|bistro|bakery|restaurant|petrol\s*station|gas\s*station|storefront|shop|hotel|mosque|street|sidewalk|plaza|mall|building|outside|in\s+front\s+of)/i.test(lower);
+  const isParkedOrStopped = /\b(stopped|parked|standing|stationed|idling|still|curbside|parking|driveway|outside)\b/i.test(lower) || isAutomotive && hasOutdoorVenue && !/\b(driving\s+past|racing\s+past|speeding\s+past|drifting)\b/i.test(lower);
+  const explicitRolling = /\b(rolling|racing|drifting|drift|burnout|chase\s*shot|high\s*speed)\b/i.test(lower);
+  const isDynamicMotion = isAutomotive && (explicitRolling || !isParkedOrStopped && /\b(highway|speed|motion|driving|pacing|track|chase|road|fast)\b/i.test(lower));
+  const isRainOrNight = /\b(rain|rainy|night|wet|storm|dark|neon|midnight|puddles|mist|fog|slick)\b/i.test(lower);
+  const isWildlife = /\b(lion|tiger|leopard|cat|dog|bear|wolf|eagle|bird|horse|cheetah|goat|sheep|cow|deer|elephant|monkey|rabbit|fox|panda|animal|wildlife)\b/i.test(lower);
+  const isPortrait = /\b(woman|man|girl|boy|person|face|model|lady|portrait|character)\b/i.test(lower);
   const isCyberpunk = /(cyberpunk|sci-fi|futuristic|neon city|tokyo 2099|mecha|cyborg)/i.test(lower);
-  const isArchitecture = /(building|architecture|mansion|room|cabin|interior|skyscraper|penthouse|palace|villa)/i.test(lower);
-  const isLandscape = /(mountain|forest|lake|ocean|waterfall|sunset|beach|canyon|desert|landscape|nature)/i.test(lower);
+  const isArchitecture = /\b(building|architecture|mansion|room|cabin|interior|skyscraper|penthouse|palace|villa)\b/i.test(lower);
+  const isLandscape = /\b(mountain|forest|lake|ocean|waterfall|sunset|beach|canyon|desert|landscape|nature)\b/i.test(lower);
   let detectedSubject = "general";
   let recommendedRatio = "1:1";
   if (isAutomotive) {
@@ -6205,26 +6199,65 @@ function sanitizeAndCleanPrompt(rawPrompt) {
     recommendedRatio = "16:9";
   }
   return {
-    cleanedPrompt: text || rawPrompt.trim(),
+    cleanedPrompt: text || (rawPrompt || "").trim(),
     detectedSubject,
     isDynamicMotion,
+    isParkedOrStopped,
+    explicitInside,
+    hasOutdoorVenue,
     isRainOrNight,
     recommendedRatio
   };
 }
+function buildAutoNegativePrompt(prompt, userNegative, sanitized) {
+  const s = sanitized || sanitizeAndCleanPrompt(prompt);
+  const lowerPrompt = `${prompt} ${s.cleanedPrompt}`.toLowerCase();
+  const parts = [
+    userNegative?.trim() || "blurry, low quality, deformed, distorted, watermark, signature, text, cartoon, cgi, bad anatomy"
+  ];
+  if (s.detectedSubject === "automotive") {
+    parts.push("deformed grille, warped wheels, extra headlights, distorted emblem, mutated car body");
+    if (lowerPrompt.includes("bmw")) {
+      parts.push("audi, four rings, mercedes, mercedes-benz, porsche");
+    } else if (lowerPrompt.includes("audi")) {
+      parts.push("bmw, mercedes, mercedes-benz");
+    } else if (lowerPrompt.includes("mercedes")) {
+      parts.push("bmw, audi, four rings");
+    }
+    if (s.isParkedOrStopped && !s.explicitInside) {
+      parts.push(
+        "car inside building, indoor car, car inside cafe interior, ceiling above car, motion blur, spinning wheels, blurry wheels, desert road, empty highway, driving"
+      );
+    }
+  }
+  return Array.from(
+    new Set(
+      parts.join(", ").split(",").map((x) => x.trim()).filter(Boolean)
+    )
+  ).join(", ");
+}
 async function enhancePromptWithAI(userPrompt, style, lighting, camera) {
-  const { cleanedPrompt, detectedSubject, isDynamicMotion, isRainOrNight } = sanitizeAndCleanPrompt(userPrompt);
+  const sanitized = sanitizeAndCleanPrompt(userPrompt);
+  const { cleanedPrompt, detectedSubject, isDynamicMotion, isParkedOrStopped, explicitInside, hasOutdoorVenue, isRainOrNight } = sanitized;
+  const safeCamera = isParkedOrStopped ? "35mm outdoor street lens, stationary parked composition, sharp static alloy wheels, zero motion blur" : camera && camera !== "action-tracking" && camera !== "natural-35mm" ? camera : isDynamicMotion ? "35mm action tracking rig, 1/60s panning shutter" : "35mm DSLR prime lens, tack-sharp focus";
+  const safeLighting = lighting || (isRainOrNight ? hasOutdoorVenue ? "wet asphalt reflections, warm cafe storefront lights and streetlights" : "wet asphalt reflections, streetlights and headlights glowing through rain" : isParkedOrStopped && hasOutdoorVenue ? "warm outdoor afternoon light and glowing cafe window lights" : "cinematic golden hour");
   let subjectDirective = "";
   if (detectedSubject === "automotive") {
-    if (isDynamicMotion || isRainOrNight) {
+    if (isParkedOrStopped) {
+      subjectDirective = `CRITICAL STATIONARY EXTERIOR AUTOMOTIVE DIRECTIVE:
+The user wants the vehicle PARKED / STOPPED${hasOutdoorVenue ? " AT THE REQUESTED VENUE" : ""}.
+- KEEP EVERY SINGLE USER DETAIL: exact car model, exact color, and exact location/building mentioned in "${cleanedPrompt}".
+${hasOutdoorVenue && !explicitInside ? "- SPATIAL RULE: The car MUST be parked OUTSIDE on the street/curbside parking area IN FRONT OF the building exterior (with storefront signage, large warm-lit glass windows, and outdoor sidewalk visible behind/beside the car). NEVER place the car INSIDE the shop/building, and NEVER switch to an empty highway or desert road." : ""}
+- STATIONARY RULE: The car is completely still/parked with sharp stationary wheels, crisp brake calipers, and ZERO motion blur.`;
+    } else if (isDynamicMotion) {
       subjectDirective = `IMPORTANT AUTOMOTIVE ROLLING SHOT DIRECTIVE:
-The subject is a high-performance vehicle in motion (e.g., rolling on a highway or in rain).
-- Frame strictly as an exhilarating DYNAMIC ROLLING TRACKING SHOT captured from an ultra-low-angle chase vehicle pacing alongside at high speed.
-- DO NOT treat as a static portrait, and DO NOT use shallow-depth-of-field that blurs the road awkwardly.
-- Explicitly detail: realistic radial motion blur on spinning alloy wheels and rushing asphalt tarmac, car body in razor-sharp crystal focus, glossy wet asphalt reflections, raindrops on bodywork, glowing aggressive headlights slicing through rain mist and darkness, water spray trailing behind tires, cinema 4K, Speedhunters & Top Gear aesthetic.`;
+The subject is a high-performance vehicle in motion.
+- Frame strictly as an exhilarating DYNAMIC ROLLING TRACKING SHOT from a low-angle chase vehicle pacing alongside.
+- Keep the exact car model, color, and road/weather environment requested by the user.
+- Detail radial motion blur on spinning wheels and asphalt, car body razor-sharp, crisp reflections.`;
     } else {
       subjectDirective = `IMPORTANT AUTOMOTIVE PHOTOGRAPHY DIRECTIVE:
-Frame as an award-winning commercial automotive shoot. Sharp metallic reflections, aggressive stance, pristine body lines, realistic rim and tire detail, hyper-realistic reflections.`;
+Frame cleanly as an authentic photorealistic automotive photograph preserving the exact car model, color, stance, and setting requested by the user. Sharp metallic reflections, realistic wheels, no hallucinated background swaps.`;
     }
   } else if (detectedSubject === "portrait") {
     subjectDirective = `PORTRAIT DIRECTIVE:
@@ -6237,22 +6270,19 @@ National Geographic documentary photography, sharp focus on eyes, individual fur
 Grand cinematic perspective, atmospheric fog and volumetric lighting, intricate structural textures, pristine reflections.`;
   }
   const models = getPrioritizedModels(["gemini-3.1-flash-lite", "gemini-4-hydrogen"]);
-  const aiPrompt = `You are a world-class prompt engineer specializing in Midjourney V6, FLUX.1 Realism, and cinematic commercial photography.
+  const aiPrompt = `You are a world-class prompt engineer specializing in FLUX.1 Realism and cinematic commercial photography.
 Original Concept: "${cleanedPrompt}"
 Requested Style: "${style || "photorealistic 8k"}"
-Lighting: "${lighting || (isRainOrNight ? "wet asphalt reflections, streetlights and headlights glowing through rain" : "cinematic golden hour")}"
-Camera: "${camera || (isDynamicMotion ? "35mm action tracking rig, 1/60s panning shutter" : "Hasselblad 8k")}"
+Lighting: "${safeLighting}"
+Camera: "${safeCamera}"
 
 ${subjectDirective}
 
 TASK:
-1. If the input is in Roman Urdu, Urdu, or Hindi, translate the visual elements accurately into evocative visual English.
-2. Produce a single, supreme-quality prompt (40-75 words) that specifies:
-   - Dynamic camera angle, motion, and framing
-   - Material textures (metallic paint, wet asphalt, glass, reflections)
-   - Atmospheric lighting and volumetric weather
-   - Crystal sharp focus on the main subject (zero cartoon distortion, zero blur on the subject)
-3. Return ONLY the enhanced prompt string. NO introductory text, NO quotes, NO markdown.`;
+1. If the input contains Roman Urdu, Urdu, Hindi, or typos, understand the exact intent cleanly.
+2. Produce ONE concise, faithful image-generation prompt (40-65 words max so every word stays within diffusion token limits).
+3. PUT THE EXACT SUBJECT, COLOR, STATIONARY/MOTION STATE, AND LOCATION IN THE FIRST 20 WORDS (never drop or replace the user's requested location!).
+4. Return ONLY the enhanced prompt string. NO introductory text, NO quotes, NO markdown.`;
   if (process.env.GEMINI_API_KEY) {
     const activeClient = getAIClient();
     for (const model of models) {
@@ -6285,26 +6315,18 @@ TASK:
       }
     }
   }
-  const styleDesc = style === "anime" ? "high-budget anime key visual illustration, Makoto Shinkai lighting, crisp cel-shaded reflections" : style === "3d-render" ? "Octane 3D render, Unreal Engine 5 raytracing, volumetric shaders, ultra-clean geometry" : style === "cyberpunk" ? "cyberpunk neon metropolis aesthetic, magenta and cyan atmospheric glow, chromatic reflections" : style === "cinematic-fantasy" ? "epic fantasy concept art, dramatic volumetric rays, painterly micro-detail" : "photorealistic 8k cinema camera photograph, ultra-crisp optics, natural film color grading";
-  const lightingDesc = lighting && lighting !== "golden-hour" ? lighting.replace(/-/g, " ") : isRainOrNight ? "dark night atmosphere, glowing overhead highway lamps, wet asphalt reflections, headlights piercing through mist" : "cinematic dramatic natural lighting";
-  const cameraDesc = camera && camera !== "action-tracking" ? camera.replace(/-/g, " ") : isDynamicMotion ? "low-angle rolling chase vehicle panning shot, radial wheel motion blur, rushing asphalt streaking past, subject in razor-sharp focus" : "8k precision lens, tack-sharp subject focus";
+  const styleDesc = style === "anime" ? "high-budget anime key visual illustration, crisp cel-shaded lighting" : style === "3d-render" ? "Octane 3D render, Unreal Engine 5 raytracing, ultra-clean geometry" : style === "cyberpunk" ? "cyberpunk neon metropolis aesthetic, magenta and cyan atmospheric glow" : style === "cinematic-fantasy" ? "epic fantasy concept art, dramatic volumetric rays" : "photorealistic 8k DSLR camera photograph, natural film color grading";
+  const lightingDesc = safeLighting.replace(/-/g, " ");
+  const cameraDesc = safeCamera.replace(/-/g, " ");
   if (detectedSubject === "automotive") {
     const lowerClean = cleanedPrompt.toLowerCase();
-    let brandCue = "";
-    if (lowerClean.includes("bmw")) {
-      brandCue = ", unmistakable BMW M series sports coupe with iconic BMW twin kidney grille and BMW roundel emblem, aggressive angel-eye LED headlights";
-    } else if (lowerClean.includes("mercedes")) {
-      brandCue = ", unmistakable Mercedes-Benz AMG coupe with iconic three-pointed star grille emblem";
-    } else if (lowerClean.includes("audi")) {
-      brandCue = ", unmistakable Audi RS sports car with honeycomb singleframe grille and four-rings emblem";
-    } else if (lowerClean.includes("porsche")) {
-      brandCue = ", unmistakable Porsche 911 silhouette with iconic round frogs-eye LED headlights";
-    } else if (lowerClean.includes("lamborghini")) {
-      brandCue = ", unmistakable angular Lamborghini V12 supercar with Y-shaped LED headlights";
-    } else if (lowerClean.includes("ferrari")) {
-      brandCue = ", unmistakable sculptural Ferrari supercar with prancing horse badge";
+    const isSedan = /\b(m5|m3|sedan|s-class|rs6|rs7|panamera|taycan|saloon)\b/i.test(lowerClean);
+    const bodyCue = isSedan ? "authentic 4-door sports sedan body proportions, three-quarter front angle" : "authentic factory OEM vehicle proportions, three-quarter angle";
+    if (isParkedOrStopped) {
+      const outdoorPlacement = hasOutdoorVenue && !explicitInside ? "parked stationary outdoors on street curb in front of exterior cafe glass storefront and warm lit windows, sidewalk behind car" : "parked stationary on street with crisp static alloy wheels, zero motion blur";
+      return `${cleanedPrompt}, ${outdoorPlacement}, ${bodyCue}, ${cameraDesc}, ${lightingDesc}, ${styleDesc}`;
     }
-    return `${cleanedPrompt}${brandCue}, ${cameraDesc}, ${lightingDesc}, ${styleDesc}, crisp metallic bodywork reflections, 8k automotive editorial`;
+    return `${cleanedPrompt}, ${bodyCue}, ${cameraDesc}, ${lightingDesc}, ${styleDesc}, crisp metallic bodywork reflections`;
   }
   if (detectedSubject === "wildlife") {
     return `${cleanedPrompt}, National Geographic wildlife photography, razor-sharp focus on eyes and fur texture, ${lightingDesc}, ${styleDesc}`;
@@ -6403,20 +6425,12 @@ function getAiHordeDimensions(width, height) {
 async function runAiHordeDiffusion(diffusionPrompt, width, height, seed, negativePrompt, style) {
   try {
     const dims = getAiHordeDimensions(width, height);
-    const lowerPrompt = diffusionPrompt.toLowerCase();
-    let antiBrand = "";
-    if (lowerPrompt.includes("bmw")) {
-      antiBrand = ", audi, four rings, mercedes, mercedes-benz";
-    } else if (lowerPrompt.includes("audi")) {
-      antiBrand = ", bmw, mercedes";
-    } else if (lowerPrompt.includes("mercedes")) {
-      antiBrand = ", bmw, audi";
-    }
-    const neg = `${negativePrompt || "blurry, low quality, deformed, distorted, watermark, signature, text, cartoon, bad anatomy"}${antiBrand}`;
+    const neg = negativePrompt || buildAutoNegativePrompt(diffusionPrompt);
     const hordePrompt = `${diffusionPrompt} ### ${neg}`;
     const models = style === "anime" ? ["Nova Anime XL", "Abyss OrangeMix", "Deliberate", "stable_diffusion"] : [
       "ICBINP - I Can't Believe It's Not Photography",
       "AbsoluteReality",
+      "EpicRealism",
       "Deliberate",
       "majicMIX realistic",
       "stable_diffusion"
@@ -6435,7 +6449,7 @@ async function runAiHordeDiffusion(diffusionPrompt, width, height, seed, negativ
           params: {
             width: dims.width,
             height: dims.height,
-            steps: 14,
+            steps: 20,
             cfg_scale: 7,
             sampler_name: "k_euler_a",
             seed: String(Math.abs(Math.floor(seed)) % 2147483647),
@@ -6520,10 +6534,58 @@ async function searchWikimediaBitmapBuffer(subjectQuery, requestedWidth, request
     return null;
   }
 }
+function inferAspectRatio(width, height) {
+  const ratio = width / Math.max(1, height);
+  if (ratio >= 1.55) return "16:9";
+  if (ratio >= 1.15) return "4:3";
+  if (ratio <= 0.68) return "9:16";
+  if (ratio <= 0.85) return "3:4";
+  return "1:1";
+}
+async function runGeminiImageGeneration(diffusionPrompt, width, height) {
+  if (!process.env.GEMINI_API_KEY) return null;
+  try {
+    const activeClient = getAIClient();
+    const aspectRatio = inferAspectRatio(width, height);
+    const response = await Promise.race([
+      activeClient.models.generateContent({
+        model: "gemini-3.1-flash-lite-image",
+        contents: {
+          parts: [{ text: diffusionPrompt }]
+        },
+        config: {
+          imageConfig: {
+            aspectRatio
+          }
+        }
+      }),
+      new Promise(
+        (_, reject) => setTimeout(() => reject(new Error("Gemini image timeout")), 18e3)
+      )
+    ]);
+    for (const part of response.candidates?.[0]?.content?.parts ?? []) {
+      if (part.inlineData?.data) {
+        const buf = Buffer.from(part.inlineData.data, "base64");
+        if (buf.length > 5e3) {
+          return { buffer: buf, engine: "Bexus Imagen 3.1 Ultra 8K" };
+        }
+      }
+    }
+    return null;
+  } catch (err) {
+    console.warn("[Bexus Image] Gemini image generation fallback:", err?.message || err);
+    return null;
+  }
+}
 async function generateNeuralDiffusionBuffer(diffusionPrompt, width, height, seed, negativePrompt, style) {
   const w = snapDiffusionDimension(width);
   const h = snapDiffusionDimension(height);
   const safeSeed = Math.abs(Math.floor(seed)) % 2147483647;
+  const effectiveNeg = buildAutoNegativePrompt(diffusionPrompt, negativePrompt);
+  const geminiResult = await runGeminiImageGeneration(diffusionPrompt, width, height);
+  if (geminiResult) {
+    return geminiResult;
+  }
   const fluxBuffer = await runGradioImageSpace(
     "https://black-forest-labs-flux-1-schnell.hf.space",
     [diffusionPrompt, safeSeed, false, w, h, 4],
@@ -6537,7 +6599,7 @@ async function generateNeuralDiffusionBuffer(diffusionPrompt, width, height, see
     width,
     height,
     safeSeed,
-    negativePrompt,
+    effectiveNeg,
     style
   );
   if (hordeResult) {
@@ -6547,7 +6609,7 @@ async function generateNeuralDiffusionBuffer(diffusionPrompt, width, height, see
     "https://stabilityai-stable-diffusion-3-5-large-turbo.hf.space",
     [
       diffusionPrompt,
-      negativePrompt || "blurry, low quality, deformed, ugly, watermark, text, cartoon distortion",
+      effectiveNeg,
       safeSeed,
       false,
       w,
@@ -6564,28 +6626,31 @@ async function generateNeuralDiffusionBuffer(diffusionPrompt, width, height, see
 }
 async function renderCleanImageBuffer(rawPrompt, style = "photorealistic", requestedWidth = 1280, requestedHeight = 720, seed, negativePrompt, fallbackSubject) {
   let finalPrompt = rawPrompt.trim();
-  const cleanSubject = (fallbackSubject || sanitizeAndCleanPrompt(rawPrompt).cleanedPrompt).trim();
+  const sanitized = sanitizeAndCleanPrompt(fallbackSubject || rawPrompt);
+  const cleanSubject = (fallbackSubject || sanitized.cleanedPrompt).trim();
   const lowerRaw = finalPrompt.toLowerCase();
-  const looksEnhanced = finalPrompt.length >= 65 && (lowerRaw.includes("8k") || lowerRaw.includes("lighting") || lowerRaw.includes("lens") || lowerRaw.includes("shot"));
+  const looksEnhanced = finalPrompt.length >= 65 && (lowerRaw.includes("8k") || lowerRaw.includes("lighting") || lowerRaw.includes("lens") || lowerRaw.includes("shot") || lowerRaw.includes("photograph"));
   if (!looksEnhanced) {
     try {
       finalPrompt = await enhancePromptWithAI(rawPrompt, style);
     } catch {
-      const sanitized = sanitizeAndCleanPrompt(rawPrompt);
-      if (sanitized.detectedSubject === "automotive") {
+      if (sanitized.detectedSubject === "automotive" && sanitized.isParkedOrStopped) {
+        finalPrompt = `${sanitized.cleanedPrompt}, parked stationary outdoors on the street curb in front of the exterior storefront, crisp static alloy wheels, zero motion blur, 8k photorealistic DSLR photograph`;
+      } else if (sanitized.detectedSubject === "automotive" && sanitized.isDynamicMotion) {
         finalPrompt = `${sanitized.cleanedPrompt}, dynamic low-angle rolling chase vehicle tracking shot, realistic wheel motion blur, glowing headlights, 8k photorealistic automotive editorial`;
       } else {
         finalPrompt = `${sanitized.cleanedPrompt}, ${style} style, ultra high resolution 8k, cinematic lighting, sharp focus`;
       }
     }
   }
+  const effectiveNegative = buildAutoNegativePrompt(cleanSubject, negativePrompt, sanitized);
   const activeSeed = typeof seed === "number" ? seed : Math.floor(Math.random() * 99999999);
   const neuralResult = await generateNeuralDiffusionBuffer(
     finalPrompt,
     requestedWidth,
     requestedHeight,
     activeSeed,
-    negativePrompt,
+    effectiveNegative,
     style
   );
   if (neuralResult?.buffer && neuralResult.buffer.length > 5e3) {
@@ -6642,11 +6707,14 @@ async function renderCleanImageBuffer(rawPrompt, style = "photorealistic", reque
 async function generateImageContent(prompt, style = "photorealistic", aspectRatio = "1:1", lighting, camera, negativePrompt, _engineModel = "flux") {
   const sanitized = sanitizeAndCleanPrompt(prompt);
   const activeRatio = aspectRatio || sanitized.recommendedRatio || "1:1";
+  const effectiveNegative = buildAutoNegativePrompt(sanitized.cleanedPrompt, negativePrompt, sanitized);
   let finalPrompt = sanitized.cleanedPrompt;
   try {
     finalPrompt = await enhancePromptWithAI(sanitized.cleanedPrompt, style, lighting, camera);
   } catch (_e) {
-    if (sanitized.detectedSubject === "automotive") {
+    if (sanitized.detectedSubject === "automotive" && sanitized.isParkedOrStopped) {
+      finalPrompt = `${sanitized.cleanedPrompt}, parked stationary outdoors on the paved street curb in front of the exterior storefront windows, crisp static alloy wheels, zero motion blur, 8k photorealistic DSLR photograph`;
+    } else if (sanitized.detectedSubject === "automotive" && sanitized.isDynamicMotion) {
       finalPrompt = `${sanitized.cleanedPrompt}, dynamic low-angle rolling tracking shot, wheel motion blur, aggressive headlights, wet tarmac reflections, 8k automotive magazine photography`;
     } else {
       finalPrompt = `${sanitized.cleanedPrompt}, ${style} style, ultra high resolution 8k, cinematic lighting, razor sharp focus, highly detailed textures`;
@@ -6678,7 +6746,7 @@ async function generateImageContent(prompt, style = "photorealistic", aspectRati
       width,
       height,
       seed,
-      negativePrompt,
+      effectiveNegative,
       sanitized.cleanedPrompt
     );
     if (cleanBuffer && cleanBuffer.length > 5e3) {

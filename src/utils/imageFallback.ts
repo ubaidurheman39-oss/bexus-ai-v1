@@ -20,9 +20,18 @@ export function normalizePromptTypos(rawPrompt: string): string {
     text = text.replace(p, '');
   }
 
-  return text
+  text = text
     // Common user typos & variants
     .replace(/\bstooped\b/gi, 'stopped')
+    .replace(/\bstoped\b/gi, 'stopped')
+    .replace(/\bparkd\b/gi, 'parked')
+    .replace(/\bcompition\b/gi, 'Competition')
+    .replace(/\bcompetetion\b/gi, 'Competition')
+    .replace(/\bcompetion\b/gi, 'Competition')
+    .replace(/\bcoffe\b/gi, 'coffee')
+    .replace(/\bcofee\b/gi, 'coffee')
+    .replace(/\bcoffie\b/gi, 'coffee')
+    .replace(/\bcolour\b/gi, 'color')
     .replace(/\bsation\b/gi, 'station')
     .replace(/\bstaton\b/gi, 'station')
     .replace(/\bpetrol\s*sation\b/gi, 'petrol station')
@@ -36,6 +45,10 @@ export function normalizePromptTypos(rawPrompt: string): string {
     .replace(/\bmclaren\b/gi, 'mclaren')
     .replace(/\bbugati\b/gi, 'bugatti')
     .replace(/\broles\s*royce\b/gi, 'rolls royce')
+    .replace(/\bbmw\b/gi, 'BMW')
+    .replace(/\bm5\b/gi, 'M5')
+    .replace(/\bm4\b/gi, 'M4')
+    .replace(/\bm3\b/gi, 'M3')
     .replace(/\bimge\b/gi, 'image')
     .replace(/\bpic\b/gi, 'picture')
     .replace(/\bnite\b/gi, 'night')
@@ -43,6 +56,17 @@ export function normalizePromptTypos(rawPrompt: string): string {
     // Roman Urdu & Hindi terms
     .replace(/\bgaari\b/gi, 'car')
     .replace(/\bgari\b/gi, 'car')
+    .replace(/\bkhari\b/gi, 'parked')
+    .replace(/\bkhadi\b/gi, 'parked')
+    .replace(/\bruki\b/gi, 'stopped')
+    .replace(/\bbahar\b/gi, 'outside')
+    .replace(/\bandar\b/gi, 'inside')
+    .replace(/\bk[ae]?\s+samne\b/gi, 'in front of')
+    .replace(/\bsafed\b/gi, 'white')
+    .replace(/\bkaala\b/gi, 'black')
+    .replace(/\bkala\b/gi, 'black')
+    .replace(/\bla+l\b/gi, 'red')
+    .replace(/\bneela\b/gi, 'blue')
     .replace(/\bbarish\b/gi, 'rain')
     .replace(/\braat\b/gi, 'night')
     .replace(/\bdin\b/gi, 'day')
@@ -72,7 +96,14 @@ export function normalizePromptTypos(rawPrompt: string): string {
     .replace(/\broti\b/gi, 'bread')
     .replace(/\bmahal\b/gi, 'palace')
     .replace(/\bghar\b/gi, 'house')
-    .replace(/\bdulhan\b/gi, 'bride')
+    .replace(/\bdulhan\b/gi, 'bride');
+
+  return text
+    .replace(/\baik\b/gi, 'a')
+    .replace(/\s+\b(ho|hai|hain|karo|kardo|chahiye)\s*$/gi, '')
+    .replace(/\b(?:at|on|in|near|by)\s+(?:an?\s+)?(stopped|parked|standing)\b/gi, '$1')
+    .replace(/\b(at|in|on|near|outside)\s+\1\b/gi, '$1')
+    .replace(/\s{2,}/g, ' ')
     .trim();
 }
 

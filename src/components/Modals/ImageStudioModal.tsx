@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { sounds } from '../../services/soundEffects';
-import { getClientDirectImageUrl } from '../../utils/imageFallback';
+import { getClientDirectImageUrl, normalizePromptTypos } from '../../utils/imageFallback';
 import { 
   X, 
   Sparkles, 
@@ -48,6 +48,7 @@ const STYLE_PRESETS = [
 ];
 
 const CAMERA_PRESETS = [
+  { id: 'natural-35mm', label: '35mm Natural Full-Frame Prime', icon: '📷' },
   { id: 'action-tracking', label: '35mm Action Rig (Rolling Shot)', icon: '🏎️' },
   { id: '85mm-portrait', label: '85mm Hasselblad Prime (Portrait)', icon: '📸' },
   { id: 'wide-16mm', label: '16mm Ultra-Wide Angle Panoramic', icon: '🔭' },
@@ -89,7 +90,7 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
   const [prompt, setPrompt] = useState('');
   const [selectedStyle, setSelectedStyle] = useState('photorealistic');
   const [selectedLighting, setSelectedLighting] = useState('golden-hour');
-  const [selectedCamera, setSelectedCamera] = useState('action-tracking');
+  const [selectedCamera, setSelectedCamera] = useState('natural-35mm');
   const [selectedRatio, setSelectedRatio] = useState('16:9');
   const [negativePrompt, setNegativePrompt] = useState('blurry, low quality, deformed, extra fingers, watermark, bad anatomy, cartoonish, low resolution');
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -102,27 +103,21 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [isLightbox, setIsLightbox] = useState(false);
 
-  // Auto-detect automotive or dynamic subject from prompt
-  const isAutomotive = /(bmw|mercedes|audi|porsche|ferrari|lamborghini|car|vehicle|supercar|bike|motorcycle)/i.test(prompt);
-  const isDynamicMotion = /(rolling|racing|highway|speed|motion|drifting|driving|track)/i.test(prompt);
-  const isRainOrNight = /(rain|rainy|night|wet|dark|neon|midnight)/i.test(prompt);
-
-  // Helper to sanitize prompt from conversational chatter and typos
-  const cleanPromptText = (raw: string) => {
-    return raw
-      .replace(/^(please\s+)?(can\s+you\s+)?(m?ake|create|generate|render|draw|build|paint|give\s+me|show\s+me)\s+(an?\s+)?(ai\s+)?(image|imge|pic|picture|photo|wallpaper|artwork|render)\s+(of|for|about)?\s+/i, '')
-      .replace(/^(ai\s+)?(image|imge|picture|pic|photo|wallpaper)\s+(of|for|about)?\s+/i, '')
-      .replace(/\bimge\b/gi, 'image')
-      .replace(/\bpic\b/gi, 'picture')
-      .replace(/\bnite\b/gi, 'night')
-      .replace(/\bcarz\b/gi, 'cars')
-      .replace(/\bgaari\b/gi, 'car')
-      .replace(/\bbakri\b/gi, 'goat')
-      .replace(/\bbakra\b/gi, 'goat')
-      .replace(/\bbilli\b/gi, 'cat')
-      .replace(/\bkutta\b/gi, 'dog')
-      .trim();
+  // Auto-detect automotive subject, parked vs rolling motion, and atmosphere from normalized prompt
+  const detectPromptSignals = (rawText: string) => {
+    const cleaned = normalizePromptTypos(rawText);
+    const auto = /(bmw|mercedes|audi|porsche|ferrari|lamborghini|nissan|supra|gtr|m5|m4|m3|car|cars|vehicle|sedan|coupe|suv|truck|supercar|hypercar|bike|motorcycle)/i.test(cleaned);
+    const parked = /(stopped|parked|standing|stationed|idling|still|outside|in front of|coffee\s*shop|cafe|bakery|restaurant|petrol\s*station|gas\s*station|driveway|garage|showroom|curbside|parking)/i.test(cleaned);
+    const explicitRolling = /(rolling|racing|drifting|drift|burnout|chase\s*shot|high\s*speed|highway\s*speed)/i.test(cleaned);
+    const dynamicMotion = auto && (explicitRolling || (!parked && /(highway|speed|motion|driving|track|fast)/i.test(cleaned)));
+    const rainOrNight = /(rain|rainy|night|wet|dark|neon|midnight)/i.test(cleaned);
+    return { cleaned, auto, parked, dynamicMotion, rainOrNight };
   };
+
+  const promptSignals = detectPromptSignals(prompt);
+  const isAutomotive = promptSignals.auto;
+  const isParkedOrStopped = promptSignals.parked;
+  const isDynamicMotion = promptSignals.dynamicMotion;
 
   // AI Magic Prompt Enhancer
   const handleEnhancePrompt = async () => {
@@ -134,15 +129,19 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
     }
 
     setIsEnhancing(true);
-    const cleaned = cleanPromptText(prompt);
+    const sig = detectPromptSignals(prompt);
 
-    // Contextual camera/lighting for enhance
-    let cameraToUse = selectedCamera;
+    let cameraToUse = selectedCamera === 'natural-35mm' ? '35mm full-frame prime lens, crisp natural framing' : selectedCamera;
     let lightingToUse = selectedLighting;
-    if (isAutomotive && isDynamicMotion) {
+    if (sig.auto && sig.parked) {
+      cameraToUse = '35mm outdoor street lens, stationary parked composition, crisp static alloy wheels, zero motion blur';
+      if (!sig.rainOrNight && selectedLighting === 'golden-hour') {
+        lightingToUse = 'warm afternoon daylight & cozy storefront window ambient glow';
+      }
+    } else if (sig.auto && sig.dynamicMotion) {
       cameraToUse = '35mm action tracking rig, panning shutter with wheel motion blur';
     }
-    if (isRainOrNight) {
+    if (sig.rainOrNight) {
       lightingToUse = 'wet asphalt reflections, streetlights and headlights glowing through dark rain';
     }
 
@@ -151,7 +150,7 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: cleaned,
+          prompt: sig.cleaned,
           style: selectedStyle,
           lighting: lightingToUse,
           camera: cameraToUse,
@@ -174,13 +173,24 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
     const rawPromptToUse = (overridePrompt || prompt).trim();
     if (!rawPromptToUse) return;
     
-    const promptToUse = cleanPromptText(rawPromptToUse);
+    const sig = detectPromptSignals(rawPromptToUse);
+    const promptToUse = sig.cleaned || rawPromptToUse;
     sounds.playClick();
     setIsGenerating(true);
 
     const effectiveRatio = selectedRatio;
-    const effectiveCamera = (isAutomotive && isDynamicMotion) ? '35mm action tracking rig (rolling shot)' : selectedCamera;
-    const effectiveLighting = isRainOrNight ? 'wet asphalt reflections & rainy night' : selectedLighting;
+    const effectiveCamera = sig.auto && sig.parked
+      ? '35mm outdoor street lens, stationary parked composition, sharp static wheels, zero motion blur'
+      : sig.auto && sig.dynamicMotion
+      ? '35mm action tracking rig (rolling shot)'
+      : selectedCamera === 'natural-35mm'
+      ? '35mm full-frame prime lens, sharp subject focus'
+      : selectedCamera;
+    const effectiveLighting = sig.rainOrNight
+      ? 'wet asphalt reflections & rainy night'
+      : sig.auto && sig.parked && selectedLighting === 'golden-hour'
+      ? 'natural outdoor daylight & warm exterior storefront glow'
+      : selectedLighting;
 
     try {
       const res = await fetch('/api/image', {
@@ -224,7 +234,7 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
         if (effectiveRatio === '16:9') width = 1280;
         else if (effectiveRatio === '21:9') width = 1344;
 
-        const directUrl = getClientDirectImageUrl(rawPromptToUse, width);
+        const directUrl = getClientDirectImageUrl(promptToUse, width);
         const newItem: GeneratedHistoryItem = {
           id: 'img_' + Date.now(),
           url: directUrl,
@@ -244,7 +254,7 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
       if (effectiveRatio === '16:9') width = 1280;
       else if (effectiveRatio === '21:9') width = 1344;
 
-      const directUrl = getClientDirectImageUrl(rawPromptToUse, width);
+      const directUrl = getClientDirectImageUrl(promptToUse, width);
       const newItem: GeneratedHistoryItem = {
         id: 'img_' + Date.now(),
         url: directUrl,
@@ -416,21 +426,53 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
                   </div>
                 </div>
 
-                {/* Automotive Action Auto-detection Badge */}
+                {/* Automotive Scene Auto-detection Badge */}
                 {isAutomotive && (
-                  <div className="p-2.5 rounded-xl bg-gradient-to-r from-orange-500/15 to-pink-500/15 border border-orange-500/30 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 text-orange-300">
-                      <Flame className="w-4 h-4 text-orange-400 shrink-0 animate-pulse" />
-                      <span className="font-semibold text-[11px]">Automotive Rolling Mode Active</span>
-                      <span className="text-[10px] text-zinc-400 hidden sm:inline">• Pacing chase rig & wheel motion blur applied</span>
+                  <div className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
+                    isParkedOrStopped
+                      ? 'bg-gradient-to-r from-emerald-500/15 to-cyan-500/15 border-emerald-500/30'
+                      : isDynamicMotion
+                      ? 'bg-gradient-to-r from-orange-500/15 to-pink-500/15 border-orange-500/30'
+                      : 'bg-gradient-to-r from-indigo-500/15 to-purple-500/15 border-indigo-500/30'
+                  }`}>
+                    <div className={`flex items-center gap-2 ${
+                      isParkedOrStopped
+                        ? 'text-emerald-300'
+                        : isDynamicMotion
+                        ? 'text-orange-300'
+                        : 'text-indigo-300'
+                    }`}>
+                      {isParkedOrStopped ? (
+                        <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
+                      ) : (
+                        <Flame className={`w-4 h-4 shrink-0 ${isDynamicMotion ? 'text-orange-400 animate-pulse' : 'text-indigo-400'}`} />
+                      )}
+                      <span className="font-semibold text-[11px]">
+                        {isParkedOrStopped
+                          ? 'Automotive Parked Scene Active'
+                          : isDynamicMotion
+                          ? 'Automotive Rolling Mode Active'
+                          : 'Automotive Studio Mode Active'}
+                      </span>
+                      <span className="text-[10px] text-zinc-400 hidden sm:inline">
+                        {isParkedOrStopped
+                          ? '• Stationary outdoor street framing & crisp wheel detail'
+                          : isDynamicMotion
+                          ? '• Pacing chase rig & wheel motion blur applied'
+                          : '• Crisp bodywork reflections & true-to-prompt framing'}
+                      </span>
                     </div>
-                    <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-200 border border-orange-500/30 font-mono">
+                    <span className={`text-[9.5px] px-2 py-0.5 rounded-full border font-mono ${
+                      isParkedOrStopped
+                        ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/30'
+                        : isDynamicMotion
+                        ? 'bg-orange-500/20 text-orange-200 border-orange-500/30'
+                        : 'bg-indigo-500/20 text-indigo-200 border-indigo-500/30'
+                    }`}>
                       {selectedRatio} Mode
                     </span>
                   </div>
                 )}
-
-
 
                 {/* Permanent Ultra 8K Masterpiece Engine Banner */}
                 <div className="p-3 rounded-2xl bg-gradient-to-r from-pink-500/15 via-purple-500/10 to-indigo-500/15 border border-pink-500/30 flex items-center justify-between shadow-lg shadow-pink-500/5">
@@ -446,7 +488,9 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
                         </span>
                       </div>
                       <p className="text-[10px] text-zinc-400 mt-0.5">
-                        Dynamic vehicle action, radial motion blur, wet tarmac reflections & cinematic color grading (Watermark-free).
+                        {isParkedOrStopped
+                          ? 'True-to-prompt exterior scene composition, crisp parked stance & natural reflections (Watermark-free).'
+                          : 'Context-aware neural realism, crisp optical detail & cinematic lighting matched to your exact scene (Watermark-free).'}
                       </p>
                     </div>
                   </div>
