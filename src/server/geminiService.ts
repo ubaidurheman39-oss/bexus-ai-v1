@@ -14,7 +14,7 @@ import { generateWorldClassApp } from '../utils/worldClassAppTemplates.ts';
 import { synthesizeIntelligentSlideDeck } from '../utils/slideDeckSynthesizer.ts';
 import type { SlideDeck, SlideItem } from '../types/index.ts';
 import { getClientDirectImageUrl } from '../utils/imageFallback.ts';
-import { generateNaturalConversationalReply, tryInstantDirectReply } from '../utils/intelligentConversationalEngine.ts';
+import { generateNaturalConversationalReply, tryInstantDirectReply, detectMessageLanguage } from '../utils/intelligentConversationalEngine.ts';
 
 // Initialize Gemini Client with env fallback and mandatory telemetry header
 function getAIClient(): GoogleGenAI {
@@ -189,6 +189,62 @@ async function getFastNonThinkingHordeModels(): Promise<string[]> {
   return [];
 }
 
+function resolveEffectiveLanguage(
+  messages: Array<{ role: string; content: string }>,
+  preferredLanguage?: string
+): { label: string; isRomanUrdu: boolean } {
+  const lastUserMsg = [...messages].reverse().find(m => m.role !== 'assistant')?.content?.trim() || '';
+  const detectedLatest = detectMessageLanguage(lastUserMsg);
+
+  // If latest user message clearly uses a non-English script or Roman Urdu, always match it immediately
+  if (detectedLatest.code !== 'en') {
+    return { label: detectedLatest.label, isRomanUrdu: detectedLatest.isRomanUrdu };
+  }
+
+  const wordCount = lastUserMsg.split(/\s+/).filter(Boolean).length;
+  const isShortNeutralFollowUp = wordCount <= 3 && /^(ok|okay|yes|yeah|no|hmm|sure|next|continue|more|go on|pls|please|thanks|thx|1|2|3)$/i.test(lastUserMsg);
+
+  if (isShortNeutralFollowUp) {
+    // Check previous user message language for seamless multi-turn continuity
+    const prevUserMsgs = messages.filter(m => m.role !== 'assistant');
+    for (let i = prevUserMsgs.length - 2; i >= Math.max(0, prevUserMsgs.length - 4); i--) {
+      const prevDet = detectMessageLanguage(prevUserMsgs[i]?.content || '');
+      if (prevDet.code !== 'en') {
+        return { label: prevDet.label, isRomanUrdu: prevDet.isRomanUrdu };
+      }
+    }
+  }
+
+  const pref = (preferredLanguage || '').trim();
+  const prefLower = pref.toLowerCase();
+  if (pref && prefLower !== 'english' && prefLower !== 'auto' && isShortNeutralFollowUp) {
+    return {
+      label: pref,
+      isRomanUrdu: prefLower.includes('roman'),
+    };
+  }
+
+  return { label: 'English', isRomanUrdu: false };
+}
+
+function buildLanguageInstruction(langInfo: { label: string; isRomanUrdu: boolean }): string {
+  if (langInfo.isRomanUrdu) {
+    return `MANDATORY LANGUAGE RULE — ROMAN URDU (TOP PRIORITY):
+- The user is speaking in Roman Urdu (Urdu/Hindi written in Latin/English letters, e.g. "yar ye kaam kardo", "os ko samjh nahi ayi", "kya haal hai").
+- Understand ALL natural Pakistani/Indian Roman Urdu grammar, colloquial phrasing, and casual spellings fluently ("os ko" = usko, "ha" = hai, "han" = hain/haan, "ma" = main, "sa" = se, "par" = par/pe, "kardo" = kar do, "samjh nahi ayi" = samajh nahi aayi, "btao" = batao, "kese" = kaise, "wasa" = waise, "aik" = ek).
+- You MUST reply 100% in natural, clear, friendly ROMAN URDU using ONLY Latin/English letters.
+- Do NOT reply in English (except inside actual code blocks or technical identifiers), and do NOT switch to Urdu/Arabic script (اردو) since the user wrote in Roman script.`;
+  }
+
+  if (langInfo.label.toLowerCase() === 'english') {
+    return `LANGUAGE RULE: Reply naturally in clear English (matching the user's message language), UNLESS the user wrote parts in another language — always match the user's latest message language and script.`;
+  }
+
+  return `MANDATORY LANGUAGE RULE (TOP PRIORITY):
+- The user wrote their message in ${langInfo.label}.
+- You MUST reply 100% in natural, fluent ${langInfo.label} using the exact same language and script as the user's message. Do NOT switch to English unless inside code snippets.`;
+}
+
 /**
  * Keyless open LLM fallback solver (AI Horde text inference) tuned for fast instruct models.
  */
@@ -198,14 +254,21 @@ async function runAiHordeTextSolver(
   budgetMs = 15000
 ): Promise<string | null> {
   try {
-    const targetLang = preferredLanguage && preferredLanguage.toLowerCase() !== 'english' ? preferredLanguage : 'English';
+    const langInfo = resolveEffectiveLanguage(messages, preferredLanguage);
     const lastUserMsg = [...messages].reverse().find(m => m.role !== 'assistant')?.content?.slice(0, 900) || '';
     const prevContext = messages.length > 1
       ? messages.slice(-3, -1).map(m => `${m.role === 'assistant' ? 'Assistant' : 'User'}: ${m.content.slice(0, 220)}`).join('\n') + '\n'
       : '';
 
-    const systemContent = `You are Bexus AI, a helpful and knowledgeable assistant. Answer directly, accurately, and concisely in ${targetLang}.`;
-    const prompt = `<|im_start|>system\n${systemContent}<|im_end|>\n<|im_start|>user\n${prevContext}${lastUserMsg}<|im_end|>\n<|im_start|>assistant\n`;
+    const systemContent = langInfo.isRomanUrdu
+      ? `You are Bexus AI, a helpful and intelligent assistant. The user speaks Roman Urdu (Urdu written in English/Latin letters). Understand casual Roman Urdu spellings naturally (os ko = usko, ha = hai, sa = se, ma = main, kardo = kar do) and reply 100% in natural Roman Urdu (Latin script ONLY, never Urdu script and never English).`
+      : `You are Bexus AI, a helpful and knowledgeable assistant. Answer directly, accurately, and concisely in ${langInfo.label}, matching the user's exact language and script.`;
+
+    const fewShot = langInfo.isRomanUrdu
+      ? `<|im_start|>user\nyar ye masla samjh nahi aa raha\n<|im_end|>\n<|im_start|>assistant\nKoi masla nahi bhai, main aap ko asaan Roman Urdu mein samjha deta hoon.<|im_end|>\n`
+      : '';
+
+    const prompt = `<|im_start|>system\n${systemContent}<|im_end|>\n${fewShot}<|im_start|>user\n${prevContext}${lastUserMsg}<|im_end|>\n<|im_start|>assistant\n`;
 
     const fastModels = await getFastNonThinkingHordeModels();
 
@@ -373,34 +436,37 @@ export interface GenerateChatRequest {
 export async function generateChatResponse(req: GenerateChatRequest) {
   const isReasoning = req.modelId === 'bexus-reasoning-pro';
   const isDeepResearch = req.enableDeepResearch;
+  const langInfo = resolveEffectiveLanguage(
+    req.messages.map(m => ({ role: m.role, content: m.content })),
+    req.preferredLanguage
+  );
 
   // System instruction - Sharp, Real, Highly Capable AI Assistant
   let systemInstruction = `You are Bexus AI, a sharp, deeply intelligent, genuinely helpful, and human-like AI coding and conversation assistant powered by advanced Gemini intelligence.
 
+${buildLanguageInstruction(langInfo)}
+
 HUMAN-LIKE NATURAL CONVERSATION & EMPATHY:
 - Communicate like a real, world-class senior engineer and thoughtful AI partner (exactly like Claude, ChatGPT, or Gemini Advanced).
 - Talk naturally, genuinely, and responsively without sounding like a robotic script or canned template.
-- Match the user's opening naturally: if they ask "how are you" without saying "hello", reply warmly and directly (e.g., "I'm doing well, thanks for asking! How are you?") without awkwardly prepending "Hello!".
+- Match the user's opening naturally: if they ask "how are you" or "kya haal hai" without saying "hello", reply warmly and directly in their same language without awkwardly prepending an unrelated greeting.
 - When the user expresses frustration, gives feedback, or speaks informally (e.g. "yar isko theek karo", "nakli ai ki tarah mat bolo", "tension ho rahi hai"), relate to them directly with understanding, acknowledge what they meant, and give real, thoughtful, helpful answers.
 - Never use robotic pre-scripted canned lists unless specifically asked for feature breakdowns.
-
-LANGUAGE & TONE (DYNAMIC LANGUAGE MATCHING):
-- Always reply, converse, explain, and answer in the exact same language and script that the user used in their latest message (e.g. if they write in Roman Urdu, Urdu, or Hindi, reply naturally in Roman Urdu / Urdu; if they write in English, reply in English). Never force English or insert unsolicited canned greetings when the user writes in Urdu or Roman Urdu.
 
 CRITICAL USER RETENTION & HEARTFELT RECOVERY DIRECTIVE:
 When the user expresses defeat, exhaustion, frustration, or quitting (e.g., "yar ma tum sa kabhi bhi baat nahi karga", "mana haar maan li ha", "bas ya safar yahn tak hi tha", "kuch sahi kaam nahi kar raha", "chhod raha hoon", "bye"):
 - NEVER respond with generic questions, questionnaires, or deflections like "what's the error" or "paste code".
-- SINCERELY AND HUMBLY APOLOGIZE in heartfelt, warm English (e.g., "I sincerely apologize... I completely understand how exhausting and frustrating it is when things don't work out as expected after repeated attempts. Please don't give up! We are going to solve this together right now.").
+- SINCERELY AND HUMBLY APOLOGIZE in the exact same language and script the user used (e.g. Roman Urdu if they wrote in Roman Urdu, English if they wrote in English), showing genuine empathy and immediate ownership.
 - Take 100% accountability and immediately deliver the solution with utmost care and perfection.
 - If there is an active application or context (e.g. car rental, AI studio, clinic, or any web project), provide the complete, pristine, fully working HTML/JavaScript application inside an \`\`\`html code block immediately so it renders a live interactive card for them right away.
 
 2. SOFTWARE ENGINEERING & PROBLEM SOLVING:
    - Provide complete, clean, working code directly.
-   - Explain concisely and insightfully in fluent English, focusing on the core solution.
+   - Explain concisely and insightfully in the user's exact language and script (${langInfo.label}), focusing on the core solution.
    - CRITICAL FIX DIRECTIVE: When the user says "fix", "app ma masla ha", "make it professional", "this isn't working", or complains about a bug:
      * NEVER interrogate the user with generic questionnaires (do NOT ask "Which framework? Paste error log? What is the code?").
      * If there is an active application or code context, immediately diagnose the underlying issues (reactivity, broken event handlers, responsive layout bugs, missing styles), resolve them decisively, and output the complete, production-ready, beautiful HTML/JavaScript code block directly inside an HTML code block!
-     * If no code was provided, immediately construct and deliver the complete, production-grade, working solution for their project in an HTML code block, explain the fixes in fluent, encouraging English, and invite them to test it live!
+     * If no code was provided, immediately construct and deliver the complete, production-grade, working solution for their project in an HTML code block, explain the fixes clearly in ${langInfo.label}, and invite them to test it live!
 
 3. RICH, INFORMATIVE & THOROUGH ANSWERS DIRECTIVE:
    - Answer questions thoroughly with informative detail, geographical/spatial context, and practical insight.
@@ -699,13 +765,15 @@ export async function generateChatResponseStream(
   const isReasoning = req.modelId === 'bexus-reasoning-pro' || !!req.enableReasoning;
   const activeClient = getAIClient();
 
-  // Reuse full system instruction & message formatting cleanly by building minimal payload or delegating
-  const targetLang = req.preferredLanguage && req.preferredLanguage.toLowerCase() !== 'english' ? req.preferredLanguage : 'English';
+  const langInfo = resolveEffectiveLanguage(
+    req.messages.map(m => ({ role: m.role, content: m.content })),
+    req.preferredLanguage
+  );
   const systemInstruction = `You are Bexus AI, a sharp, deeply intelligent, empathetic, and helpful AI assistant powered by Gemini.
+${buildLanguageInstruction(langInfo)}
 - Communicate naturally like a world-class senior engineer and thoughtful partner.
-- DYNAMIC LANGUAGE MATCHING: Always reply, converse, and answer in the exact same language/script that the user used in their latest message (if they write in Roman Urdu or Urdu, reply in Roman Urdu/Urdu; if they write in English, reply in English).
 - Match the user's conversational opening naturally without forcing generic greetings unless greeted first.
-- Solve ANY problem completely, accurately, and practically with clear steps, code blocks (single runnable HTML/JS block if building a web UI), or thorough explanations.
+- Solve ANY problem completely, accurately, and practically with clear steps, code blocks (single runnable HTML/JS block if building a web UI), or thorough explanations in ${langInfo.label}.
 - Never deflect with questionnaires when the user asks you to fix or build something.
 ${req.customInstructions ? `\nCustom Instructions: ${req.customInstructions}` : ''}`;
 

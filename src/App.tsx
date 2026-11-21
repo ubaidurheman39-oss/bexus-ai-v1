@@ -58,7 +58,7 @@ import type { SavedChat, SavedProjectItem } from './components/Sidebar';
 import { Attachment, DeepResearchReport } from './types';
 import { sounds } from './services/soundEffects';
 import { getClientDirectImageUrl } from './utils/imageFallback';
-import { generateNaturalConversationalReply, tryInstantDirectReply } from './utils/intelligentConversationalEngine';
+import { generateNaturalConversationalReply, tryInstantDirectReply, detectMessageLanguage } from './utils/intelligentConversationalEngine';
 import type { UltraFeature } from './data/ultraFeatures';
 import { AI_PERSONAS, AIPersona } from './data/personas';
 
@@ -353,7 +353,7 @@ export default function App() {
     utterance.pitch = 1.0;
 
     const targetLang = (langName || activeSpokenLanguage || 'English').toLowerCase();
-    const langCode = targetLang === 'urdu' ? 'ur-PK' : targetLang === 'hindi' ? 'hi-IN' : targetLang === 'arabic' ? 'ar-SA' : targetLang === 'spanish' ? 'es-ES' : 'en-US';
+    const langCode = targetLang.includes('urdu') ? 'ur-PK' : targetLang === 'hindi' ? 'hi-IN' : targetLang === 'arabic' ? 'ar-SA' : targetLang === 'spanish' ? 'es-ES' : targetLang === 'french' ? 'fr-FR' : targetLang === 'turkish' ? 'tr-TR' : 'en-US';
     utterance.lang = langCode;
 
     // Pick top natural/expressive voice matching language if available
@@ -1289,19 +1289,30 @@ export default function App() {
           return updated;
         });
       } else {
-        // Detect explicit language switch command e.g. "speak in urdu", "speak in hindi", "speak in english"
+        // Detect explicit language switch command OR auto-detect the exact language of the user's message
         const langPromptMatch = content.match(/(?:speak|talk|reply|answer|bolo|baat\s+karo)\s+(?:in|into|me|mein)\s+([a-zA-Z\s]+)/i);
+        const detectedMsgLang = detectMessageLanguage(content);
         let currentLang = activeSpokenLanguage;
         if (langPromptMatch && langPromptMatch[1]) {
           const reqStr = langPromptMatch[1].trim().toLowerCase();
-          if (reqStr.includes('urdu')) currentLang = 'Urdu';
+          if (reqStr.includes('roman urdu') || reqStr.includes('hinglish')) currentLang = 'Roman Urdu';
+          else if (reqStr.includes('urdu')) currentLang = 'Urdu';
           else if (reqStr.includes('hindi')) currentLang = 'Hindi';
           else if (reqStr.includes('arabic') || reqStr.includes('arabi')) currentLang = 'Arabic';
           else if (reqStr.includes('spanish')) currentLang = 'Spanish';
           else if (reqStr.includes('french')) currentLang = 'French';
           else if (reqStr.includes('german')) currentLang = 'German';
+          else if (reqStr.includes('turkish')) currentLang = 'Turkish';
+          else if (reqStr.includes('punjabi')) currentLang = 'Punjabi';
+          else if (reqStr.includes('pashto')) currentLang = 'Pashto';
           else if (reqStr.includes('english') || reqStr.includes('eng')) currentLang = 'English';
           setActiveSpokenLanguage(currentLang);
+        } else if (detectedMsgLang.code !== 'en') {
+          currentLang = detectedMsgLang.label;
+          setActiveSpokenLanguage(currentLang);
+        } else if (content.trim().split(/\s+/).filter(Boolean).length >= 3) {
+          currentLang = 'English';
+          setActiveSpokenLanguage('English');
         }
 
         const chatPayload = {
@@ -1456,7 +1467,8 @@ export default function App() {
 
           if (isUnavailableStub(data?.text)) {
             try {
-              const targetLang = currentLang && currentLang.toLowerCase() !== 'english' ? currentLang : 'English';
+              const targetLang = currentLang && currentLang.toLowerCase() !== 'english' ? currentLang : detectedMsgLang.label;
+              const isRoman = targetLang.toLowerCase().includes('roman');
               const rescueCtrl = new AbortController();
               const rescueTimer = setTimeout(() => rescueCtrl.abort(), 8500);
               const rescueRes = await fetch('https://text.pollinations.ai/', {
@@ -1468,7 +1480,9 @@ export default function App() {
                   messages: [
                     {
                       role: 'system',
-                      content: `You are Bexus AI, a sharp, helpful problem-solving assistant. Reply strictly in clear, practical ${targetLang}. Directly answer or solve the user's latest question.`
+                      content: isRoman
+                        ? 'You are Bexus AI, a sharp, helpful assistant. Understand natural Roman Urdu (e.g. os ko = usko, ha = hai, sa = se, ma = main, kardo = kar do) and reply 100% in natural Roman Urdu using ONLY Latin/English letters (never Urdu script and never English).'
+                        : `You are Bexus AI, a sharp, helpful problem-solving assistant. Reply strictly in clear, practical ${targetLang}, matching the user's exact language and script. Directly answer or solve the user's latest question.`
                     },
                     { role: 'user', content: content.slice(0, 1200) }
                   ]
@@ -1551,21 +1565,29 @@ export default function App() {
     } catch (err: any) {
       console.error('[Bexus Chat Network/Server Handler]:', err);
       const userName = currentUser?.name?.trim() || 'User';
+      const errDetectedLang = detectMessageLanguage(content);
       let fallbackText = generateNaturalConversationalReply(content, {
         userName,
-        lang: activeSpokenLanguage,
+        lang: errDetectedLang.code !== 'en' ? errDetectedLang.label : activeSpokenLanguage,
         voiceMode: false,
       });
 
-      if (fallbackText.includes("I couldn't reach the live AI reasoning server")) {
+      if (fallbackText.includes("I couldn't reach the live AI reasoning server") || fallbackText.includes('live AI connection abhi busy hai')) {
         try {
+          const targetLang = errDetectedLang.code !== 'en' ? errDetectedLang.label : activeSpokenLanguage;
+          const isRoman = errDetectedLang.isRomanUrdu || targetLang.toLowerCase().includes('roman');
           const rescueRes = await fetch('https://text.pollinations.ai/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               model: 'openai',
               messages: [
-                { role: 'system', content: 'You are Bexus AI. Solve the user problem clearly and concisely in English.' },
+                {
+                  role: 'system',
+                  content: isRoman
+                    ? 'You are Bexus AI. Understand casual Roman Urdu (os ko = usko, ha = hai, sa = se, ma = main, kardo = kar do) and solve the user query 100% in natural Roman Urdu (Latin alphabet only, never Urdu script or English).'
+                    : `You are Bexus AI. Solve the user problem clearly and concisely in ${targetLang}, matching the exact language of the user's message.`
+                },
                 { role: 'user', content: content }
               ]
             })

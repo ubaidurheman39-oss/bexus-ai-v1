@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { sounds } from '../../services/soundEffects';
-import { generateNaturalConversationalReply } from '../../utils/intelligentConversationalEngine';
+import { generateNaturalConversationalReply, detectMessageLanguage } from '../../utils/intelligentConversationalEngine';
 import {
   X,
   Volume2,
@@ -327,7 +327,10 @@ export const VoiceStudioModal: React.FC<VoiceStudioModalProps> = ({
       { role: 'user', text: spokenQuery, time: nowTime }
     ]);
 
-    const targetLangName = getLanguageName(selectedVoice.langCode);
+    const voiceLangName = getLanguageName(selectedVoice.langCode);
+    const spokenDetected = detectMessageLanguage(spokenQuery);
+    const effectiveLangName = spokenDetected.code !== 'en' ? spokenDetected.label : voiceLangName;
+    const isRomanUrdu = spokenDetected.isRomanUrdu;
 
     try {
       const res = await fetch('/api/chat', {
@@ -340,8 +343,10 @@ export const VoiceStudioModal: React.FC<VoiceStudioModalProps> = ({
           ],
           modelId: 'gemini-4-hydrogen',
           enableReasoning: false,
-          preferredLanguage: targetLangName,
-          customInstructions: `You are Bexus AI Voice Assistant. Respond strictly in fluent, natural ${targetLangName}. Give a direct, accurate, problem-solving answer suitable for voice playback (concise but complete).`
+          preferredLanguage: effectiveLangName,
+          customInstructions: isRomanUrdu
+            ? 'You are Bexus AI Voice Assistant. Respond strictly in natural Roman Urdu (Latin letters, e.g. "Haanji bilkul"). Give a concise, direct, problem-solving answer suitable for voice playback.'
+            : `You are Bexus AI Voice Assistant. Respond strictly in fluent, natural ${effectiveLangName} matching the exact language the user spoke. Give a direct, accurate, problem-solving answer suitable for voice playback (concise but complete).`
         })
       });
 
@@ -359,7 +364,12 @@ export const VoiceStudioModal: React.FC<VoiceStudioModalProps> = ({
           body: JSON.stringify({
             model: 'openai',
             messages: [
-              { role: 'system', content: `You are Bexus AI Voice Assistant. Give a concise, clear, accurate answer in ${targetLangName}.` },
+              {
+                role: 'system',
+                content: isRomanUrdu
+                  ? 'You are Bexus AI Voice Assistant. Reply concisely and naturally in Roman Urdu (Latin letters only).'
+                  : `You are Bexus AI Voice Assistant. Give a concise, clear, accurate answer in ${effectiveLangName}.`
+              },
               { role: 'user', content: spokenQuery }
             ]
           })
@@ -373,7 +383,9 @@ export const VoiceStudioModal: React.FC<VoiceStudioModalProps> = ({
       }
 
       if (!replyText) {
-        replyText = `I hear you! Let's work on this together.`;
+        replyText = spokenDetected.isUrduLike
+          ? 'Haanji, main sun raha hoon! Batayein kis cheez mein madad chahiye?'
+          : `I hear you! Let's work on this together.`;
       }
 
       setDialogue(prev => [
@@ -384,7 +396,10 @@ export const VoiceStudioModal: React.FC<VoiceStudioModalProps> = ({
       await playVoiceResponse(replyText);
     } catch (err) {
       console.warn('Conversational voice error:', err);
-      const fallbackReply = `I am here and ready to help you with that!`;
+      const fallbackReply = generateNaturalConversationalReply(spokenQuery, {
+        lang: effectiveLangName,
+        voiceMode: true,
+      });
       setDialogue(prev => [
         ...prev,
         { role: 'assistant', text: fallbackReply, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }

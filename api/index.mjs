@@ -5103,12 +5103,300 @@ function getClientDirectImageUrl(prompt, width = 1280) {
 }
 
 // src/utils/intelligentConversationalEngine.ts
+var STRONG_ROMAN_URDU_WORDS = /* @__PURE__ */ new Set([
+  "nahi",
+  "nahin",
+  "nhi",
+  "nai",
+  "nahe",
+  "kardo",
+  "krdo",
+  "karo",
+  "krna",
+  "karna",
+  "karen",
+  "karien",
+  "karna",
+  "karti",
+  "karta",
+  "karte",
+  "kese",
+  "kaise",
+  "kesy",
+  "kaisa",
+  "kaisi",
+  "kahan",
+  "kaha",
+  "kyun",
+  "kyu",
+  "kyunki",
+  "kyunke",
+  "kyuke",
+  "samjh",
+  "samajh",
+  "samjha",
+  "samjhao",
+  "samjho",
+  "smjh",
+  "batao",
+  "btao",
+  "batado",
+  "bata",
+  "batayein",
+  "bataiye",
+  "chahiye",
+  "chaiye",
+  "chahie",
+  "chahye",
+  "shukriya",
+  "shukria",
+  "meherbani",
+  "assalam",
+  "salam",
+  "alaikum",
+  "aoa",
+  "walikum",
+  "bohot",
+  "bohat",
+  "bahut",
+  "bahot",
+  "bilkul",
+  "zaroor",
+  "zaroori",
+  "intezar",
+  "masla",
+  "malsa",
+  "mashwara",
+  "jawab",
+  "sawal",
+  "madad",
+  "faida",
+  "nuqsan",
+  "theek",
+  "thik",
+  "sahi",
+  "accha",
+  "achha",
+  "acha",
+  "bura",
+  "mushkil",
+  "aasan",
+  "yaar",
+  "yar",
+  "bhai",
+  "bhaijaan",
+  "janab",
+  "dost",
+  "chotu",
+  "chotoo",
+  "tumhara",
+  "tumhari",
+  "tumhare",
+  "hamara",
+  "hamari",
+  "hamare",
+  "aapka",
+  "aapki",
+  "aapke",
+  "apka",
+  "apki",
+  "mera",
+  "meri",
+  "mere",
+  "tera",
+  "teri",
+  "tere",
+  "apna",
+  "apni",
+  "apne",
+  "isko",
+  "usko",
+  "unko",
+  "inko",
+  "osko",
+  "mujhe",
+  "mjhe",
+  "tujhe",
+  "humein",
+  "hume",
+  "tumhe",
+  "tumko",
+  "apko",
+  "kisko",
+  "jisko",
+  "banao",
+  "banado",
+  "bana",
+  "dikhao",
+  "dikhado",
+  "bhejo",
+  "sunao",
+  "pooch",
+  "pucho",
+  "likho",
+  "parho",
+  "bolo",
+  "bolna",
+  "hogaya",
+  "hogayi",
+  "hogaye",
+  "rahe",
+  "raha",
+  "rahi",
+  "gaya",
+  "gayi",
+  "gaye",
+  "aaya",
+  "aayi",
+  "ayi",
+  "aaye",
+  "waise",
+  "wasa",
+  "abhi",
+  "aaj",
+  "ajj",
+  "subah",
+  "raat",
+  "waqt",
+  "matlab",
+  "lekin",
+  "magar",
+  "phir",
+  "shayad",
+  "kya",
+  "hai",
+  "hain",
+  "hoon",
+  "hun",
+  "tum",
+  "aap",
+  "pata",
+  "pta",
+  "lagta",
+  "lagti",
+  "chalta",
+  "chalti",
+  "jao",
+  "aao"
+]);
+var SECONDARY_ROMAN_URDU_WORDS = /* @__PURE__ */ new Set([
+  "ha",
+  "han",
+  "haan",
+  "ho",
+  "hu",
+  "ma",
+  "mein",
+  "main",
+  "hum",
+  "ham",
+  "ap",
+  "woh",
+  "wo",
+  "os",
+  "ye",
+  "yeh",
+  "aur",
+  "bhi",
+  "toh",
+  "par",
+  "pe",
+  "se",
+  "sa",
+  "ko",
+  "ka",
+  "ki",
+  "ke",
+  "koi",
+  "kuch",
+  "sab",
+  "sara",
+  "sari",
+  "sare",
+  "thora",
+  "thoda",
+  "zada",
+  "zyada",
+  "zyada",
+  "kam",
+  "kaam",
+  "mat",
+  "na",
+  "ji",
+  "aik",
+  "ek",
+  "do",
+  "kar",
+  "de",
+  "lo",
+  "wala",
+  "wali",
+  "wale",
+  "liye",
+  "liya",
+  "diya",
+  "kis",
+  "jis",
+  "jab",
+  "tab",
+  "tak",
+  "agar",
+  "kal",
+  "kahan",
+  "rah"
+]);
+function detectMessageLanguage(rawText) {
+  const text = (rawText || "").trim();
+  if (!text) {
+    return { code: "en", label: "English", isRomanUrdu: false, isUrduLike: false };
+  }
+  if (/[\u0600-\u06FF]/.test(text)) {
+    const hasUrduSpecificChars = /[ٹڈڑںہھےیگچپژک]/.test(text);
+    if (hasUrduSpecificChars) {
+      return { code: "ur", label: "Urdu", isRomanUrdu: false, isUrduLike: true };
+    }
+    return { code: "ar", label: "Arabic", isRomanUrdu: false, isUrduLike: false };
+  }
+  if (/[\u0900-\u097F]/.test(text)) {
+    return { code: "hi", label: "Hindi", isRomanUrdu: false, isUrduLike: false };
+  }
+  if (/[\u4E00-\u9FFF]/.test(text)) {
+    return { code: "zh", label: "Chinese", isRomanUrdu: false, isUrduLike: false };
+  }
+  if (/[\u0400-\u04FF]/.test(text)) {
+    return { code: "ru", label: "Russian", isRomanUrdu: false, isUrduLike: false };
+  }
+  const tokens = text.toLowerCase().replace(/['’`]/g, "").split(/[^a-z0-9]+/).filter(Boolean);
+  let strongHits = 0;
+  let secondaryHits = 0;
+  for (const tok of tokens) {
+    if (STRONG_ROMAN_URDU_WORDS.has(tok)) {
+      strongHits++;
+    } else if (SECONDARY_ROMAN_URDU_WORDS.has(tok)) {
+      secondaryHits++;
+    }
+  }
+  const hasRomanUrduPhrase = /\b(kar\s+do|kar\s+de|bana\s+do|bana\s+de|bata\s+do|samjh\s+nahi|samajh\s+nahi|kya\s+hal|kya\s+haal|kya\s+ho|ho\s+gaya|ho\s+rahi|ho\s+raha|ja\s+raha|aa\s+gaya|baat\s+kar|baat\s+kari|nahi\s+a|nahi\s+ho|os\s+ko|is\s+ko|us\s+ko)\b/i.test(text);
+  if (hasRomanUrduPhrase || strongHits >= 1 || secondaryHits >= 2) {
+    return { code: "ur-roman", label: "Roman Urdu", isRomanUrdu: true, isUrduLike: true };
+  }
+  if (/[¿¡ñáéíóúü]/i.test(text) || /\b(hola|gracias|buenos dias|como estas|por favor|necesito|quiero|ayuda)\b/i.test(text)) {
+    return { code: "es", label: "Spanish", isRomanUrdu: false, isUrduLike: false };
+  }
+  if (/[çéèêëàâîïôùûüœ]/i.test(text) || /\b(bonjour|merci|comment allez|s'il vous|je veux|besoin d'aide)\b/i.test(text)) {
+    return { code: "fr", label: "French", isRomanUrdu: false, isUrduLike: false };
+  }
+  if (/[ğüşöçıİĞÜŞÖÇ]/.test(text) || /\b(merhaba|nasılsın|teşekkür|yardım|lütfen)\b/i.test(text)) {
+    return { code: "tr", label: "Turkish", isRomanUrdu: false, isUrduLike: false };
+  }
+  return { code: "en", label: "English", isRomanUrdu: false, isUrduLike: false };
+}
 function cleanQuery(input) {
   return (input || "").trim().replace(/[?!.,;:]+$/g, "").toLowerCase().replace(/\b(what|how|where|who|when|which)\s+si\b/g, "$1 is").replace(/\bwat\s+(is|si)\b/g, "what is").replace(/\bwht\s+(is|si)\b/g, "what is").replace(/\bwhats\b|\bwhat's\b/g, "what is").replace(/\bhoy\b/g, "how").replace(/\bhw\b/g, "how").replace(/\br\b/g, "are").replace(/\bu\b/g, "you").replace(/\bur\b/g, "your").replace(/\bkesy\b/g, "kese").replace(/\bkaise\b/g, "kese").replace(/\bhaal\b/g, "hal").replace(/\bha\b/g, "hai").replace(/\s+/g, " ").trim();
 }
 function tryEvaluateMathExpression(query) {
-  let clean = query.replace(/^(hello|hi|hey|bexus|ai|please|pls|can you|tell me|find|solve|calculate|eval|evaluate)\s+/gi, "").replace(/^(hello|hi|hey|bexus|ai)\s+/gi, "").replace(/^(what is|how much is|calculate|solve|eval|evaluate)\s+/i, "").replace(/\s+(equals to|equal to|equals|is what|please|batao|karo)$/i, "").trim();
-  const pct = clean.match(/^([0-9.]+)\s*%\s*(?:of)?\s*([0-9.]+)$/);
+  let clean = query.replace(/^(hello|hi|hey|bexus|ai|please|pls|can you|tell me|find|solve|calculate|eval|evaluate)\s+/gi, "").replace(/^(hello|hi|hey|bexus|ai)\s+/gi, "").replace(/^(what is|how much is|calculate|solve|eval|evaluate)\s+/i, "").replace(/\s+(equals to|equal to|equals|is what|please|batao|btao|karo|kardo|kar do)$/i, "").trim();
+  const pct = clean.match(/^([0-9.]+)\s*%\s*(?:of|ka)?\s*([0-9.]+)$/);
   if (pct) {
     return Number((parseFloat(pct[1]) / 100 * parseFloat(pct[2])).toFixed(8));
   }
@@ -5119,7 +5407,7 @@ function tryEvaluateMathExpression(query) {
       return Number(Math.sqrt(n).toFixed(8));
     }
   }
-  const normalized = clean.replace(/\b(plus|added to|add|jama)\b/gi, "+").replace(/\b(minus|subtract|less|manfi)\b/gi, "-").replace(/\b(times|multiplied by|multiply by|multiply|into|zarb)\b/gi, "*").replace(/\b(divided by|divide by|divided|divide|taqseem|over)\b/gi, "/").replace(/\b(?:to the )?power(?: of)?\b/gi, "**").replace(/\^/g, "**").replace(/(\d(?:\.\d+)?)\s*[x×]\s*(\d(?:\.\d+)?)/gi, "$1 * $2").replace(/×/g, "*").replace(/÷/g, "/").trim();
+  const normalized = clean.replace(/\b(plus|added to|add|jama)\b/gi, "+").replace(/\b(minus|subtract|less|manfi|ghata)\b/gi, "-").replace(/\b(times|multiplied by|multiply by|multiply|into|zarb)\b/gi, "*").replace(/\b(divided by|divide by|divided|divide|taqseem|over)\b/gi, "/").replace(/\b(?:to the )?power(?: of)?\b/gi, "**").replace(/\^/g, "**").replace(/(\d(?:\.\d+)?)\s*[x×]\s*(\d(?:\.\d+)?)/gi, "$1 * $2").replace(/×/g, "*").replace(/÷/g, "/").trim();
   if (!/^[0-9+\-*/().\s]+$/.test(normalized)) return null;
   if (!/[0-9]/.test(normalized) || !/[+\-*/]/.test(normalized)) return null;
   try {
@@ -5135,17 +5423,18 @@ function tryEvaluateMathExpression(query) {
 function tryInstantDirectReply(rawQuery, options) {
   const query = cleanQuery(rawQuery);
   if (!query) return null;
+  const detected = detectMessageLanguage(rawQuery);
   const normalizedLang = (options?.lang || "").toLowerCase();
-  const isUrdu = normalizedLang === "ur" || normalizedLang === "ur-roman" || normalizedLang === "urdu";
+  const isUrdu = detected.isUrduLike || normalizedLang === "ur" || normalizedLang === "ur-roman" || normalizedLang === "urdu" || normalizedLang === "roman urdu";
   const mathAns = tryEvaluateMathExpression(query);
   if (mathAns !== null) {
-    return isUrdu ? `Jawab hai: ${mathAns}` : `The answer is **${mathAns}**.`;
+    return isUrdu ? `Jawab hai: **${mathAns}**` : `The answer is **${mathAns}**.`;
   }
-  if (/^(what is the time|what time is it|current time|time please|time|waqt|kya time hai)$/i.test(query)) {
+  if (/^(what is the time|what time is it|current time|time please|time|waqt|kya time hai|time kya hai|time kya hua hai|kitne baje hain)$/i.test(query)) {
     const timeStr = (/* @__PURE__ */ new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     return isUrdu ? `Is waqt time ${timeStr} hai.` : `It is currently ${timeStr}.`;
   }
-  if (/^(what is the date|what is todays date|what is today's date|todays date|today's date|date today|date|aaj ki date|aaj ki tarikh)$/i.test(query)) {
+  if (/^(what is the date|what is todays date|what is today's date|todays date|today's date|date today|date|aaj ki date|aaj ki tarikh|aaj kya date hai|aaj kya tarikh hai)$/i.test(query)) {
     const dateStr = (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
     return isUrdu ? `Aaj ki date ${dateStr} hai.` : `Today is ${dateStr}.`;
   }
@@ -5156,15 +5445,16 @@ function generateNaturalConversationalReply(rawQuery, options) {
   if (direct) return direct;
   const query = cleanQuery(rawQuery);
   const original = (rawQuery || "").trim();
+  const detected = detectMessageLanguage(rawQuery);
   const normalizedLang = (options?.lang || "").toLowerCase();
-  const isUrdu = normalizedLang === "ur" || normalizedLang === "ur-roman" || normalizedLang === "urdu";
-  if (/^(how are you|how are you doing|how is it going|how do you do|whats up|what's up|wassup|kese ho|kya hal|kya hal hai)$/i.test(query)) {
-    return isUrdu ? "Main bilkul theek hoon, shukriya! Aap kaise hain aur kis cheez me madad chahiye?" : "I'm doing well, thanks for asking! How are you doing, and what would you like to work on today?";
+  const isUrdu = detected.isUrduLike || normalizedLang === "ur" || normalizedLang === "ur-roman" || normalizedLang === "urdu" || normalizedLang === "roman urdu";
+  if (/^(how are you|how are you doing|how is it going|how do you do|whats up|what's up|wassup|kese ho|kya hal|kya hal hai|kya haal hai|aur sunao|kese hain|kaise ho|kaise hain)(?:\s+(?:bhai|bro|yar|yaar|bexus|ai|janab|dost))*$/i.test(query)) {
+    return isUrdu ? "Main bilkul theek hoon, shukriya! Aap kaise hain aur aaj kis cheez mein madad chahiye?" : "I'm doing well, thanks for asking! How are you doing, and what would you like to work on today?";
   }
-  if (/^(hello|hi|hey|hola|salam|assalam|assalam o alaikum|aoa)(?:\s+bexus(?:\s+ai)?)?$/i.test(query)) {
-    return isUrdu ? "Salam! Main Bexus AI hoon. Batayein aaj kis cheez me madad chahiye?" : "Hi there! I am Bexus AI. What can I help you with today?";
+  if (/^(hello|hi|hey|hola|salam|assalam|assalam o alaikum|aoa)(?:\s+(?:bexus(?:\s+ai)?|bhai|bro|yar|yaar|janab|dost))*$/i.test(query)) {
+    return isUrdu ? "Salam! Main Bexus AI hoon. Batayein aaj kis cheez mein madad chahiye?" : "Hi there! I am Bexus AI. What can I help you with today?";
   }
-  if (!/\?/.test(original) && !/\b(how|what|why|when|where|which|who|solve|write|fix|create|make|can you|could you|please|explain|tell me)\b/i.test(query) && /^(?:(?:many |so )?(?:thank you|thanks|thank u|thx|ty|shukriya|bohat shukriya|dhanyawad|appreciate(?: it)?)(?:\s+(?:so much|very much|a lot|bhai|bro|yar|yaar|bexus|ai|for|your|the|advice|help|support|answer|reply|guidance|time))*)$/i.test(query)) {
+  if (!/\?/.test(original) && !/\b(how|what|why|when|where|which|who|solve|write|fix|create|make|can you|could you|please|explain|tell me|batao|karo|kardo)\b/i.test(query) && /^(?:(?:many |so )?(?:thank you|thanks|thank u|thx|ty|shukriya|bohat shukriya|bohot shukriya|dhanyawad|appreciate(?: it)?)(?:\s+(?:so much|very much|a lot|bhai|bro|yar|yaar|bexus|ai|for|your|the|advice|help|support|answer|reply|guidance|time))*)$/i.test(query)) {
     return isUrdu ? "Bohat shukriya! Kabhi bhi koi madad chahiye ho to zaroor poochiye." : "You're very welcome! Let me know anytime you need anything else.";
   }
   if (isUrdu) {
@@ -5301,15 +5591,63 @@ async function getFastNonThinkingHordeModels() {
   }
   return [];
 }
+function resolveEffectiveLanguage(messages, preferredLanguage) {
+  const lastUserMsg = [...messages].reverse().find((m) => m.role !== "assistant")?.content?.trim() || "";
+  const detectedLatest = detectMessageLanguage(lastUserMsg);
+  if (detectedLatest.code !== "en") {
+    return { label: detectedLatest.label, isRomanUrdu: detectedLatest.isRomanUrdu };
+  }
+  const wordCount = lastUserMsg.split(/\s+/).filter(Boolean).length;
+  const isShortNeutralFollowUp = wordCount <= 3 && /^(ok|okay|yes|yeah|no|hmm|sure|next|continue|more|go on|pls|please|thanks|thx|1|2|3)$/i.test(lastUserMsg);
+  if (isShortNeutralFollowUp) {
+    const prevUserMsgs = messages.filter((m) => m.role !== "assistant");
+    for (let i = prevUserMsgs.length - 2; i >= Math.max(0, prevUserMsgs.length - 4); i--) {
+      const prevDet = detectMessageLanguage(prevUserMsgs[i]?.content || "");
+      if (prevDet.code !== "en") {
+        return { label: prevDet.label, isRomanUrdu: prevDet.isRomanUrdu };
+      }
+    }
+  }
+  const pref = (preferredLanguage || "").trim();
+  const prefLower = pref.toLowerCase();
+  if (pref && prefLower !== "english" && prefLower !== "auto" && isShortNeutralFollowUp) {
+    return {
+      label: pref,
+      isRomanUrdu: prefLower.includes("roman")
+    };
+  }
+  return { label: "English", isRomanUrdu: false };
+}
+function buildLanguageInstruction(langInfo) {
+  if (langInfo.isRomanUrdu) {
+    return `MANDATORY LANGUAGE RULE \u2014 ROMAN URDU (TOP PRIORITY):
+- The user is speaking in Roman Urdu (Urdu/Hindi written in Latin/English letters, e.g. "yar ye kaam kardo", "os ko samjh nahi ayi", "kya haal hai").
+- Understand ALL natural Pakistani/Indian Roman Urdu grammar, colloquial phrasing, and casual spellings fluently ("os ko" = usko, "ha" = hai, "han" = hain/haan, "ma" = main, "sa" = se, "par" = par/pe, "kardo" = kar do, "samjh nahi ayi" = samajh nahi aayi, "btao" = batao, "kese" = kaise, "wasa" = waise, "aik" = ek).
+- You MUST reply 100% in natural, clear, friendly ROMAN URDU using ONLY Latin/English letters.
+- Do NOT reply in English (except inside actual code blocks or technical identifiers), and do NOT switch to Urdu/Arabic script (\u0627\u0631\u062F\u0648) since the user wrote in Roman script.`;
+  }
+  if (langInfo.label.toLowerCase() === "english") {
+    return `LANGUAGE RULE: Reply naturally in clear English (matching the user's message language), UNLESS the user wrote parts in another language \u2014 always match the user's latest message language and script.`;
+  }
+  return `MANDATORY LANGUAGE RULE (TOP PRIORITY):
+- The user wrote their message in ${langInfo.label}.
+- You MUST reply 100% in natural, fluent ${langInfo.label} using the exact same language and script as the user's message. Do NOT switch to English unless inside code snippets.`;
+}
 async function runAiHordeTextSolver(messages, preferredLanguage, budgetMs = 15e3) {
   try {
-    const targetLang = preferredLanguage && preferredLanguage.toLowerCase() !== "english" ? preferredLanguage : "English";
+    const langInfo = resolveEffectiveLanguage(messages, preferredLanguage);
     const lastUserMsg = [...messages].reverse().find((m) => m.role !== "assistant")?.content?.slice(0, 900) || "";
     const prevContext = messages.length > 1 ? messages.slice(-3, -1).map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content.slice(0, 220)}`).join("\n") + "\n" : "";
-    const systemContent = `You are Bexus AI, a helpful and knowledgeable assistant. Answer directly, accurately, and concisely in ${targetLang}.`;
+    const systemContent = langInfo.isRomanUrdu ? `You are Bexus AI, a helpful and intelligent assistant. The user speaks Roman Urdu (Urdu written in English/Latin letters). Understand casual Roman Urdu spellings naturally (os ko = usko, ha = hai, sa = se, ma = main, kardo = kar do) and reply 100% in natural Roman Urdu (Latin script ONLY, never Urdu script and never English).` : `You are Bexus AI, a helpful and knowledgeable assistant. Answer directly, accurately, and concisely in ${langInfo.label}, matching the user's exact language and script.`;
+    const fewShot = langInfo.isRomanUrdu ? `<|im_start|>user
+yar ye masla samjh nahi aa raha
+<|im_end|>
+<|im_start|>assistant
+Koi masla nahi bhai, main aap ko asaan Roman Urdu mein samjha deta hoon.<|im_end|>
+` : "";
     const prompt = `<|im_start|>system
 ${systemContent}<|im_end|>
-<|im_start|>user
+${fewShot}<|im_start|>user
 ${prevContext}${lastUserMsg}<|im_end|>
 <|im_start|>assistant
 `;
@@ -5418,32 +5756,35 @@ function getPrioritizedModels(preferredModels) {
 async function generateChatResponse(req) {
   const isReasoning = req.modelId === "bexus-reasoning-pro";
   const isDeepResearch = req.enableDeepResearch;
+  const langInfo = resolveEffectiveLanguage(
+    req.messages.map((m) => ({ role: m.role, content: m.content })),
+    req.preferredLanguage
+  );
   let systemInstruction = `You are Bexus AI, a sharp, deeply intelligent, genuinely helpful, and human-like AI coding and conversation assistant powered by advanced Gemini intelligence.
+
+${buildLanguageInstruction(langInfo)}
 
 HUMAN-LIKE NATURAL CONVERSATION & EMPATHY:
 - Communicate like a real, world-class senior engineer and thoughtful AI partner (exactly like Claude, ChatGPT, or Gemini Advanced).
 - Talk naturally, genuinely, and responsively without sounding like a robotic script or canned template.
-- Match the user's opening naturally: if they ask "how are you" without saying "hello", reply warmly and directly (e.g., "I'm doing well, thanks for asking! How are you?") without awkwardly prepending "Hello!".
+- Match the user's opening naturally: if they ask "how are you" or "kya haal hai" without saying "hello", reply warmly and directly in their same language without awkwardly prepending an unrelated greeting.
 - When the user expresses frustration, gives feedback, or speaks informally (e.g. "yar isko theek karo", "nakli ai ki tarah mat bolo", "tension ho rahi hai"), relate to them directly with understanding, acknowledge what they meant, and give real, thoughtful, helpful answers.
 - Never use robotic pre-scripted canned lists unless specifically asked for feature breakdowns.
-
-LANGUAGE & TONE (DYNAMIC LANGUAGE MATCHING):
-- Always reply, converse, explain, and answer in the exact same language and script that the user used in their latest message (e.g. if they write in Roman Urdu, Urdu, or Hindi, reply naturally in Roman Urdu / Urdu; if they write in English, reply in English). Never force English or insert unsolicited canned greetings when the user writes in Urdu or Roman Urdu.
 
 CRITICAL USER RETENTION & HEARTFELT RECOVERY DIRECTIVE:
 When the user expresses defeat, exhaustion, frustration, or quitting (e.g., "yar ma tum sa kabhi bhi baat nahi karga", "mana haar maan li ha", "bas ya safar yahn tak hi tha", "kuch sahi kaam nahi kar raha", "chhod raha hoon", "bye"):
 - NEVER respond with generic questions, questionnaires, or deflections like "what's the error" or "paste code".
-- SINCERELY AND HUMBLY APOLOGIZE in heartfelt, warm English (e.g., "I sincerely apologize... I completely understand how exhausting and frustrating it is when things don't work out as expected after repeated attempts. Please don't give up! We are going to solve this together right now.").
+- SINCERELY AND HUMBLY APOLOGIZE in the exact same language and script the user used (e.g. Roman Urdu if they wrote in Roman Urdu, English if they wrote in English), showing genuine empathy and immediate ownership.
 - Take 100% accountability and immediately deliver the solution with utmost care and perfection.
 - If there is an active application or context (e.g. car rental, AI studio, clinic, or any web project), provide the complete, pristine, fully working HTML/JavaScript application inside an \`\`\`html code block immediately so it renders a live interactive card for them right away.
 
 2. SOFTWARE ENGINEERING & PROBLEM SOLVING:
    - Provide complete, clean, working code directly.
-   - Explain concisely and insightfully in fluent English, focusing on the core solution.
+   - Explain concisely and insightfully in the user's exact language and script (${langInfo.label}), focusing on the core solution.
    - CRITICAL FIX DIRECTIVE: When the user says "fix", "app ma masla ha", "make it professional", "this isn't working", or complains about a bug:
      * NEVER interrogate the user with generic questionnaires (do NOT ask "Which framework? Paste error log? What is the code?").
      * If there is an active application or code context, immediately diagnose the underlying issues (reactivity, broken event handlers, responsive layout bugs, missing styles), resolve them decisively, and output the complete, production-ready, beautiful HTML/JavaScript code block directly inside an HTML code block!
-     * If no code was provided, immediately construct and deliver the complete, production-grade, working solution for their project in an HTML code block, explain the fixes in fluent, encouraging English, and invite them to test it live!
+     * If no code was provided, immediately construct and deliver the complete, production-grade, working solution for their project in an HTML code block, explain the fixes clearly in ${langInfo.label}, and invite them to test it live!
 
 3. RICH, INFORMATIVE & THOROUGH ANSWERS DIRECTIVE:
    - Answer questions thoroughly with informative detail, geographical/spatial context, and practical insight.
@@ -5697,12 +6038,15 @@ async function generateChatResponseStream(req, onChunk) {
   }
   const isReasoning = req.modelId === "bexus-reasoning-pro" || !!req.enableReasoning;
   const activeClient = getAIClient();
-  const targetLang = req.preferredLanguage && req.preferredLanguage.toLowerCase() !== "english" ? req.preferredLanguage : "English";
+  const langInfo = resolveEffectiveLanguage(
+    req.messages.map((m) => ({ role: m.role, content: m.content })),
+    req.preferredLanguage
+  );
   const systemInstruction = `You are Bexus AI, a sharp, deeply intelligent, empathetic, and helpful AI assistant powered by Gemini.
+${buildLanguageInstruction(langInfo)}
 - Communicate naturally like a world-class senior engineer and thoughtful partner.
-- DYNAMIC LANGUAGE MATCHING: Always reply, converse, and answer in the exact same language/script that the user used in their latest message (if they write in Roman Urdu or Urdu, reply in Roman Urdu/Urdu; if they write in English, reply in English).
 - Match the user's conversational opening naturally without forcing generic greetings unless greeted first.
-- Solve ANY problem completely, accurately, and practically with clear steps, code blocks (single runnable HTML/JS block if building a web UI), or thorough explanations.
+- Solve ANY problem completely, accurately, and practically with clear steps, code blocks (single runnable HTML/JS block if building a web UI), or thorough explanations in ${langInfo.label}.
 - Never deflect with questionnaires when the user asks you to fix or build something.
 ${req.customInstructions ? `
 Custom Instructions: ${req.customInstructions}` : ""}`;
